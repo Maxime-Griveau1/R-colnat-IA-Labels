@@ -134,9 +134,15 @@ dmypy.json
 .pyre/
 
 # Données en sortie de l'application
-
 /app/statics/datas/out/
 /app/statics/datas/out/carte/
+
+# Secrets — ne jamais versionner
+APP/.env
+docker-compose.yml
+
+# Données volumineuses (modèles, images, datasets)
+APP/Datas/
 
 
 

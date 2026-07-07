@@ -5,21 +5,20 @@ services:
     ports:
       - "5000:5000"
     volumes:
-      - ./APP/Datas:/app/Datas
-      - ./APP/app:/app/app
+      - ./APP/Datas:/app/Datas       # données persistantes (ne pas supprimer)
+      - ./APP/app:/app/app           # hot-reload Flask en mode DEBUG (ne pas supprimer)
     environment:
       FLASK_HOST: "0.0.0.0"
-      DEBUG: "True"
-      SECRET_KEY: "151515670"
+      DEBUG: "False"
+      SECRET_KEY: "changez-moi-en-production"
       WTF_CSRF_ENABLE: "True"
       # URL interne Docker — Flask appelle Label Studio via le réseau Docker
       LABEL_STUDIO_URL: "http://label-studio:8080"
       # URL publique — utilisée uniquement pour les liens dans le navigateur
       LABEL_STUDIO_PUBLIC_URL: "http://localhost:8080"
-   
-      LABEL_STUDIO_API_KEY: "ea87407f0fef277b1e7102af14308ed8643bd327"
-      LABEL_STUDIO_PROJECT_ID: "11"
-      LABEL_STUDIO_FIELDS_PROJECT_ID: "12"
+      LABEL_STUDIO_API_KEY: "votre_token_label_studio"
+      LABEL_STUDIO_PROJECT_ID: ""
+      LABEL_STUDIO_FIELDS_PROJECT_ID: ""
     depends_on:
       - label-studio
     restart: unless-stopped
@@ -31,9 +30,9 @@ services:
     volumes:
       - label_studio_data:/label-studio/data
     environment:
-      LABEL_STUDIO_USERNAME: "griveaumaxime@gmail.com"
-      LABEL_STUDIO_PASSWORD: "coffrE6*forT4_label-studio"
-      SECRET_KEY: "mnhn-ls-secret-key-change-me"
+      LABEL_STUDIO_USERNAME: "votre@email.com"
+      LABEL_STUDIO_PASSWORD: "votre_mot_de_passe"
+      SECRET_KEY: "changez-moi-en-production"
     restart: unless-stopped
 
 volumes:
