@@ -17,7 +17,7 @@ services:
       # URL publique — utilisée uniquement pour les liens dans le navigateur
       LABEL_STUDIO_PUBLIC_URL: "http://localhost:8080"
    
-      LABEL_STUDIO_API_KEY: "ea87407f0fef277b1e7102af14308ed8643bd327"
+      LABEL_STUDIO_API_KEY: "votre token ici"
       LABEL_STUDIO_PROJECT_ID: "11"
       LABEL_STUDIO_FIELDS_PROJECT_ID: "12"
     depends_on:
@@ -31,8 +31,8 @@ services:
     volumes:
       - label_studio_data:/label-studio/data
     environment:
-      LABEL_STUDIO_USERNAME: "griveaumaxime@gmail.com"
-      LABEL_STUDIO_PASSWORD: "coffrE6*forT4_label-studio"
+      LABEL_STUDIO_USERNAME: "récolnat@yopmail.com"
+      LABEL_STUDIO_PASSWORD: "récolnat2026!"
       SECRET_KEY: "mnhn-ls-secret-key-change-me"
     restart: unless-stopped
 
