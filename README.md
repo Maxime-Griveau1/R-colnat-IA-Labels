@@ -86,23 +86,36 @@ Images sources (scans haute résolution)
 ### 1. Cloner le dépôt
 
 ```bash
-git clone
-cd IA_labels
+git clone https://github.com/Maxime-Griveau1/R-colnat-IA-Labels.git
+cd R-colnat-IA-Labels
 ```
 
-### 2. Configurer l'environnement
+### 2. Configurer les fichiers de secrets
+
+Deux fichiers d'exemple sont fournis. **Renommez-les et renseignez vos propres valeurs** — ne commitez jamais les fichiers réels (ils sont dans `.gitignore`).
 
 ```bash
+# Fichier d'environnement Flask
 cp APP/.env.example APP/.env
-# Éditer APP/.env : renseigner LABEL_STUDIO_API_KEY après le premier démarrage
+
+# Configuration Docker Compose
+cp docker-compose.example.yml docker-compose.yml
 ```
+
+Éditez ensuite les deux fichiers :
+
+| Fichier | Ce qu'il faut changer |
+|---------|----------------------|
+| `APP/.env` | `SECRET_KEY`, `HF_TOKEN` (Hugging Face), `LABEL_STUDIO_API_KEY` (après l'étape 4) |
+| `docker-compose.yml` | `SECRET_KEY`, `LABEL_STUDIO_USERNAME`, `LABEL_STUDIO_PASSWORD` |
 
 ### 3. Lancer avec Docker Compose
 
 ```bash
 docker compose up -d
 ```
-NB. Le premier docker compose up -d prend un certain temps (build des images) et demande une vingtaine de Go d'espace disque. 
+
+> Le premier lancement prend un certain temps (build des images) et requiert environ 20 Go d'espace disque.
 
 - Application Flask : [http://localhost:5000](http://localhost:5000)
 - Label Studio : [http://localhost:8080](http://localhost:8080)
@@ -110,9 +123,9 @@ NB. Le premier docker compose up -d prend un certain temps (build des images) et
 ### 4. Premier démarrage de Label Studio
 
 1. Ouvrir [http://localhost:8080](http://localhost:8080)
-2. Créer un compte (l'email et le mot de passe sont à définir dans `docker-compose.yml`)
-3. Récupérer le token (legacy) d'API dans **Settings → Access Token** (s'il n'est pas activer, activer le legacy token dans la partie "organisation" de label-studio)
-4. Le renseigner dans `APP/.env` : `LABEL_STUDIO_API_KEY=<token>`
+2. Se connecter avec l'email et le mot de passe définis dans `docker-compose.yml`
+3. Aller dans **Settings → Access Token** et copier le token legacy (l'activer dans la section "Organisation" si nécessaire)
+4. Le coller dans `APP/.env` : `LABEL_STUDIO_API_KEY=<token>`
 5. Redémarrer Flask : `docker compose restart flask`
 
 ---
