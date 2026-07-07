@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Récolnat — Résultats du pipeline</title>
+    <link href="https://cdn.jsdelivr.net/npm/simple-datatables@7.1.2/dist/style.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background: #f4f6fb; font-family: 'Segoe UI', sans-serif; }
+        .topbar { background: #212529; color: #fff; padding: .75rem 1.5rem;
+                  display:flex; align-items:center; gap:1rem; position:sticky; top:0; z-index:100; }
+        .topbar a { color:#adb5bd; text-decoration:none; font-size:.9rem; }
+        .topbar a:hover { color:#fff; }
+        .topbar h1 { font-size:1.1rem; margin:0; font-weight:600; }
+
+        /* Timeline */
+        .pipeline-timeline { display:flex; gap:0; margin: 1.5rem 0 2rem; overflow-x:auto; padding-bottom:.5rem; }
+        .pipe-step { flex:1; min-width:140px; text-align:center; position:relative; cursor:pointer; }
+        .pipe-step::after { content:''; position:absolute; top:24px; right:0; width:50%;
+                            height:3px; background:#dee2e6; z-index:0; }
+        .pipe-step:last-child::after { display:none; }
+        .pipe-step::before { content:''; position:absolute; top:24px; left:0; width:50%;
+                             height:3px; background:#dee2e6; z-index:0; }
+        .pipe-step:first-child::before { display:none; }
+        .pipe-step.done::before, .pipe-step.done::after { background: var(--step-color); }
+        .pipe-circle { width:48px; height:48px; border-radius:50%; display:flex; align-items:center;
+                       justify-content:center; margin:0 auto 6px; font-size:1.1rem; font-weight:700;
+                       border:3px solid #dee2e6; background:#fff; position:relative; z-index:1;
+                       color:#6c757d; transition: all .2s; }
+        .pipe-step.done .pipe-circle { border-color: var(--step-color); color: var(--step-color); }
+        .pipe-step.active .pipe-circle { background: var(--step-color); border-color: var(--step-color);
+                                          color:#fff; box-shadow: 0 0 0 4px color-mix(in srgb, var(--step-color) 20%, transparent); }
+        .pipe-label { font-size:.75rem; font-weight:600; color:#495057; }
+        .pipe-count { font-size:.7rem; color:#6c757d; margin-top:2px; }
+
+        /* Sections */
+        .step-section { margin-bottom:2.5rem; }
+        .step-header { display:flex; align-items:center; gap:.75rem; margin-bottom:1rem; }
+        .step-badge-lg { width:36px; height:36px; border-radius:50%; display:flex; align-items:center;
+                         justify-content:center; font-weight:700; color:#fff; font-size:.95rem; flex-shrink:0; }
+        .step-header h2 { font-size:1.1rem; font-weight:700; margin:0; }
+        .step-header .text-muted { font-size:.82rem; }
+
+        /* Galeries */
+        .crop-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(140px,1fr)); gap:.5rem; }
+        .crop-card { border-radius:8px; overflow:hidden; border:1.5px solid #e9ecef;
+                     background:#fff; transition: box-shadow .15s; cursor:default; }
+        .crop-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.12); }
+        .crop-img { width:100%; height:100px; object-fit:contain; background:#f8f9fa; display:block; }
+        .crop-footer { padding:4px 6px; border-top:2px solid var(--cls-color,#6c757d);
+                       background:color-mix(in srgb, var(--cls-color,#6c757d) 8%, white); }
+        .crop-cls { font-size:.65rem; font-weight:600; color: var(--cls-color,#6c757d); }
+        .crop-fn  { font-size:.6rem; color:#6c757d; overflow:hidden; white-space:nowrap;
+                    text-overflow:ellipsis; max-width:100%; display:block; }
+
+        /* Stat pills */
+        .stat-pill { display:inline-flex; align-items:center; gap:.4rem; padding:.3rem .75rem;
+                     border-radius:20px; font-size:.8rem; font-weight:600; background:#f1f3f5; }
+        .stat-pill .val { font-size:1.1rem; font-weight:700; }
+
+        /* Progress bars */
+        .pct-bar { height:8px; border-radius:4px; background:#e9ecef; overflow:hidden; margin-top:3px; }
+        .pct-fill { height:100%; border-radius:4px; transition: width .4s; }
+
+        /* Tables */
+        .result-table { font-size:.8rem; }
+        .result-table td, .result-table th { vertical-align:middle; }
+        .status-badge { display:inline-block; padding:1px 7px; border-radius:10px; font-size:.7rem; font-weight:600; }
+        .status-OK    { background:#d1fae5; color:#065f46; }
+        .status-ERREUR{ background:#fee2e2; color:#991b1b; }
+        .status-VIDE  { background:#f3f4f6; color:#6b7280; }
+        .status-CORRIGÉ{ background:#fef9c3; color:#854d0e; }
+        .status-AMBIGU{ background:#fde8d8; color:#9a3412; }
+        .status-NON_GÉOCODÉ { background:#ede9fe; color:#5b21b6; }
+        .status-NON_TROUVÉ_GBIF { background:#fce7f3; color:#9d174d; }
+
+        /* Map placeholder */
+        #map { height:360px; border-radius:10px; overflow:hidden; }
+
+        /* Filtres */
+        .filter-bar { display:flex; flex-wrap:wrap; gap:.5rem; align-items:center; margin-bottom:.75rem; }
+        .filter-bar select, .filter-bar input { font-size:.82rem; }
+
+        /* Conf badge */
+        .conf-high { color:#16a34a; font-weight:600; }
+        .conf-med  { color:#d97706; font-weight:600; }
+        .conf-low  { color:#dc2626; font-weight:600; }
+
+        @media (max-width:768px) { .crop-grid { grid-template-columns: repeat(auto-fill, minmax(110px,1fr)); } }
+    </style>
+</head>
+<body>
+
+<div class="topbar">
+    <a href="{{ url_for('accueil') }}"><i class="fas fa-arrow-left me-1"></i>Tableau de commande</a>
+    <h1 class="ms-2"><i class="fas fa-microscope me-2"></i>Résultats du pipeline Récolnat</h1>
+</div>
+
+<div class="container-fluid px-4 py-3">
+
+    <!-- ── Timeline ─────────────────────────────────────────────────────────── -->
+    <div class="pipeline-timeline">
+        {% set steps = [
+            ("1", "Classification", "#3b82f6", s1, s1.total if s1 else 0, "images"),
+            ("2", "Zones",          "#f59e0b", s2, s2.total_images if s2 else 0, "images"),
+            ("3", "Champs",         "#8b5cf6", s3, s3.total_boxes if s3 else 0, "champs"),
+            ("4", "HTR",            "#10b981", s4, s4.total_crops if s4 else 0, "crops"),
+            ("5", "Correction",     "#f97316", s5, s5.total if s5 else 0, "spécimens"),
+        ] %}
+        {% for num, label, color, data, count, unit in steps %}
+        <div class="pipe-step {% if data %}done{% endif %}" style="--step-color:{{ color }};"
+             onclick="document.getElementById('step{{ num }}').scrollIntoView({behavior:'smooth'})">
+            <div class="pipe-circle">{{ num }}</div>
+            <div class="pipe-label">{{ label }}</div>
+            <div class="pipe-count">{% if data %}{{ count }} {{ unit }}{% else %}—{% endif %}</div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- ── Step 1 : Classification ──────────────────────────────────────────── -->
+    <div class="step-section" id="step1">
+        <div class="step-header">
+            <div class="step-badge-lg" style="background:#3b82f6;">1</div>
+            <div>
+                <h2>Classification</h2>
+                <span class="text-muted">Herbier / Entomologie — modèle YOLO classify</span>
+            </div>
+        </div>
+        {% if s1 %}
+        <div class="row g-3 mb-3">
+            <div class="col-md-4">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <span class="stat-pill"><span class="val" style="color:#3b82f6;">{{ s1.total }}</span> images classifiées</span>
+                        </div>
+                        {% for item in s1.by_class %}
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <span class="small fw-semibold">{{ item.cls }}</span>
+                            <span class="small text-muted">{{ item.count }} ({{ "%.0f"|format(item.count/s1.total*100) }}%)</span>
+                        </div>
+                        <div class="pct-bar mb-2">
+                            <div class="pct-fill" style="width:{{ item.count/s1.total*100 }}%;background:#3b82f6;"></div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body d-flex align-items-center justify-content-center">
+                        <canvas id="chartS1" width="220" height="220"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="filter-bar mb-2">
+                            <select class="form-select form-select-sm" id="s1-cls-filter" onchange="loadS1()">
+                                <option value="">Toutes les classes</option>
+                                {% for item in s1.by_class %}<option value="{{ item.cls }}">{{ item.cls }}</option>{% endfor %}
+                            </select>
+                            <button class="btn btn-sm btn-outline-secondary" onclick="loadS1()"><i class="fas fa-random"></i></button>
+                        </div>
+                        <div class="crop-grid" id="s1-gallery">
+                            <div class="text-muted small text-center py-3 col-span-all">Chargement…</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="alert alert-secondary">Aucun résultat — lancez la prédiction step01.</div>
+        {% endif %}
+    </div>
+
+    <!-- ── Step 2 : Zones ───────────────────────────────────────────────────── -->
+    <div class="step-section" id="step2">
+        <div class="step-header">
+            <div class="step-badge-lg" style="background:#f59e0b;">2</div>
+            <div>
+                <h2>Détection des zones</h2>
+                <span class="text-muted">collecte, détermination, tampon… — modèle YOLO detect</span>
+            </div>
+        </div>
+        {% if s2 %}
+        <div class="row g-3 mb-3">
+            <div class="col-md-5">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="mb-3 d-flex gap-2 flex-wrap">
+                            <span class="stat-pill"><span class="val" style="color:#f59e0b;">{{ s2.total_images }}</span> images</span>
+                            <span class="stat-pill"><span class="val" style="color:#f59e0b;">{{ s2.total_boxes }}</span> zones</span>
+                            <span class="stat-pill"><span class="val" style="color:#f59e0b;">{{ "%.1f"|format(s2.total_boxes/s2.total_images) }}</span> zones/image</span>
+                        </div>
+                        <table class="table table-sm result-table">
+                            <thead class="table-light"><tr><th>Zone</th><th class="text-end">N</th><th class="text-end">%</th><th class="text-end">/ img</th></tr></thead>
+                            <tbody>
+                            {% for item in s2.by_class %}
+                            {% set color = zone_colors.get(item.cls, '#6c757d') %}
+                            <tr>
+                                <td><span class="status-badge" style="background:{{ color }}22;color:{{ color }};">{{ item.cls }}</span></td>
+                                <td class="text-end">{{ item.count }}</td>
+                                <td class="text-end">{{ "%.1f"|format(item.count/s2.total_boxes*100) }}%</td>
+                                <td class="text-end">{{ "%.2f"|format(item.count/s2.total_images) }}</td>
+                            </tr>
+                            {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body d-flex align-items-center justify-content-center">
+                        <canvas id="chartS2"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="filter-bar mb-2">
+                            <select class="form-select form-select-sm" id="s2-zone-filter" onchange="loadS2()">
+                                <option value="">Toutes les zones</option>
+                                {% for item in s2.by_class %}<option value="{{ item.cls }}">{{ item.cls }}</option>{% endfor %}
+                            </select>
+                            <button class="btn btn-sm btn-outline-secondary" onclick="loadS2()"><i class="fas fa-random"></i></button>
+                        </div>
+                        <div class="crop-grid" id="s2-gallery">
+                            <div class="text-muted small text-center py-3">Chargement…</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="alert alert-secondary">Aucun résultat — lancez la prédiction step02.</div>
+        {% endif %}
+    </div>
+
+    <!-- ── Step 3 : Champs ──────────────────────────────────────────────────── -->
+    <div class="step-section" id="step3">
+        <div class="step-header">
+            <div class="step-badge-lg" style="background:#8b5cf6;">3</div>
+            <div>
+                <h2>Détection des champs de métadonnées</h2>
+                <span class="text-muted">collecteur, date, localité, détermination… — deux modèles YOLO par zone</span>
+            </div>
+        </div>
+        {% if s3 %}
+        <div class="row g-3 mb-3">
+            <div class="col-md-5">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="mb-3 d-flex gap-2 flex-wrap">
+                            <span class="stat-pill"><span class="val" style="color:#8b5cf6;">{{ s3.total_images }}</span> images</span>
+                            <span class="stat-pill"><span class="val" style="color:#8b5cf6;">{{ s3.total_boxes }}</span> champs</span>
+                        </div>
+                        {% if s3.by_zone %}
+                        <div class="mb-2 d-flex gap-2 flex-wrap">
+                            {% for z, n in s3.by_zone.items() %}
+                            <span class="badge" style="background:#8b5cf622;color:#8b5cf6;font-size:.75rem;">{{ z }}: {{ n }}</span>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                        <table class="table table-sm result-table">
+                            <thead class="table-light"><tr><th>Champ</th><th class="text-end">N</th><th class="text-end">%</th></tr></thead>
+                            <tbody>
+                            {% for item in s3.by_class %}
+                            {% set color = field_colors.get(item.cls, '#8b5cf6') %}
+                            <tr>
+                                <td><span class="status-badge" style="background:{{ color }}22;color:{{ color }};">{{ item.cls }}</span></td>
+                                <td class="text-end">{{ item.count }}</td>
+                                <td class="text-end">{{ "%.1f"|format(item.count/s3.total_boxes*100) }}%</td>
+                            </tr>
+                            {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body d-flex align-items-center justify-content-center">
+                        <canvas id="chartS3"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="filter-bar mb-2">
+                            <select class="form-select form-select-sm" id="s3-zone-filter" onchange="loadS3()">
+                                <option value="">Toutes les zones</option>
+                                <option value="collecte">collecte</option>
+                                <option value="determination">détermination</option>
+                            </select>
+                            <select class="form-select form-select-sm" id="s3-cls-filter" onchange="loadS3()">
+                                <option value="">Toutes les classes</option>
+                                {% for item in s3.by_class %}<option value="{{ item.cls }}">{{ item.cls }}</option>{% endfor %}
+                            </select>
+                            <button class="btn btn-sm btn-outline-secondary" onclick="loadS3()"><i class="fas fa-random"></i></button>
+                        </div>
+                        <div class="crop-grid" id="s3-gallery">
+                            <div class="text-muted small text-center py-3">Chargement…</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="alert alert-secondary">Aucun résultat — lancez la prédiction step03 avec save_crops activé.</div>
+        {% endif %}
+    </div>
+
+    <!-- ── Step 4 : HTR ─────────────────────────────────────────────────────── -->
+    <div class="step-section" id="step4">
+        <div class="step-header">
+            <div class="step-badge-lg" style="background:#10b981;">4</div>
+            <div>
+                <h2>Transcriptions HTR</h2>
+                <span class="text-muted">GLM-OCR — une ligne par crop</span>
+            </div>
+        </div>
+        {% if s4 %}
+        <div class="row g-3 mb-3">
+            <div class="col-md-4">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-body">
+                        <div class="mb-3 d-flex gap-2 flex-wrap">
+                            <span class="stat-pill"><span class="val" style="color:#10b981;">{{ s4.total_crops }}</span> crops disponibles</span>
+                            {% if s4.htr_done %}
+                            <span class="stat-pill"><span class="val" style="color:#10b981;">{{ s4.total_specimens }}</span> spécimens transcrits</span>
+                            {% else %}
+                            <span class="badge bg-warning text-dark">HTR non encore lancé</span>
+                            {% endif %}
+                        </div>
+                        <canvas id="chartS4" height="180"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-8">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-body">
+                        <div class="filter-bar mb-2">
+                            <select class="form-select form-select-sm" id="s4-cls" style="width:auto;" onchange="loadS4()">
+                                <option value="">Toutes les classes</option>
+                                {% for item in s4.by_class %}<option value="{{ item.cls }}">{{ item.cls }}</option>{% endfor %}
+                            </select>
+                            <input class="form-control form-control-sm" id="s4-q" placeholder="Rechercher…"
+                                   style="width:180px;" oninput="debounce(loadS4,400)()">
+                            <button class="btn btn-sm btn-outline-secondary" onclick="loadS4()"><i class="fas fa-random"></i></button>
+                            <span class="text-muted small ms-auto" id="s4-count"></span>
+                        </div>
+                        <div style="max-height:320px; overflow-y:auto;">
+                            <table class="table table-sm table-hover result-table mb-0">
+                                <thead class="table-light sticky-top">
+                                    <tr><th>Spécimen</th><th>Champ</th><th>Transcription HTR</th></tr>
+                                </thead>
+                                <tbody id="s4-tbody">
+                                    <tr><td colspan="3" class="text-center text-muted py-3">Chargement…</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="alert alert-secondary">Aucun résultat — lancez l'extraction HTR (step04).</div>
+        {% endif %}
+    </div>
+
+    <!-- ── Step 5 : Correction ──────────────────────────────────────────────── -->
+    <div class="step-section" id="step5">
+        <div class="step-header">
+            <div class="step-badge-lg" style="background:#f97316;">5</div>
+            <div>
+                <h2>Post-traitement &amp; correction</h2>
+                <span class="text-muted">Géocodage Nominatim · Validation GBIF · Normalisation dates</span>
+            </div>
+        </div>
+        {% if s5 %}
+        <div class="row g-3 mb-3">
+            <!-- Indicateurs -->
+            <div class="col-md-4">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body">
+                        <h6 class="fw-semibold mb-3">Taux de validation</h6>
+                        {% set metrics = [
+                            ("Géocodage", s5.geo_ok, s5.geo_total, "#f97316"),
+                            ("GBIF (det. 1)", s5.gbif_ok, s5.gbif_total, "#10b981"),
+                            ("Dates collecte", s5.date_ok, s5.date_total, "#3b82f6"),
+                        ] %}
+                        {% for label, ok, total, color in metrics %}
+                        {% set pct = (ok/total*100) if total else 0 %}
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <span class="small fw-semibold">{{ label }}</span>
+                                <span class="small" style="color:{{ color }};">{{ ok }}/{{ total }} ({{ "%.0f"|format(pct) }}%)</span>
+                            </div>
+                            <div class="pct-bar">
+                                <div class="pct-fill" style="width:{{ pct }}%;background:{{ color }};"></div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                        <div class="mt-3">
+                            <span class="stat-pill"><span class="val" style="color:#f97316;">{{ s5.total }}</span> spécimens</span>
+                            {% if s5.has_geo %}
+                            <span class="stat-pill ms-2"><span class="val" style="color:#10b981;">{{ s5.has_geo }}</span> géolocalisés</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Carte -->
+            <div class="col-md-8">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body p-2">
+                        {% if s5.has_geo %}
+                        <div id="map"></div>
+                        {% else %}
+                        <div class="d-flex align-items-center justify-content-center h-100 text-muted">
+                            <div class="text-center"><i class="fas fa-map-marked-alt fa-2x mb-2"></i><br>Aucune coordonnée disponible</div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tableau des résultats -->
+        <div class="card border-0 shadow-sm">
+            <div class="card-body">
+                <div class="filter-bar mb-2">
+                    <select class="form-select form-select-sm" id="s5-status" style="width:auto;" onchange="loadS5()">
+                        <option value="">Tous les statuts</option>
+                        <option value="OK">OK</option>
+                        <option value="ERREUR">ERREUR</option>
+                        <option value="VIDE">VIDE</option>
+                        <option value="CORRIGÉ">CORRIGÉ</option>
+                        <option value="NON_GÉOCODÉ">NON_GÉOCODÉ</option>
+                    </select>
+                    <input class="form-control form-control-sm" id="s5-q" placeholder="Rechercher spécimen, localité…"
+                           style="width:220px;" oninput="debounce(loadS5,400)()">
+                    <button class="btn btn-sm btn-outline-secondary" onclick="loadS5()"><i class="fas fa-random"></i></button>
+                    <span class="text-muted small ms-auto" id="s5-count"></span>
+                </div>
+                <div style="max-height:400px; overflow-y:scroll; overflow-x:scroll; scrollbar-width:thin;">
+                    <table class="table table-sm table-hover result-table mb-0" style="min-width:1400px;">
+                        <thead class="table-light sticky-top">
+                            <tr>
+                                <th style="min-width:160px;">Spécimen</th>
+                                <th style="min-width:120px;">Collecteur</th>
+                                <th style="min-width:110px;">Date collecte</th>
+                                <th style="min-width:140px;">Localité</th>
+                                <th style="min-width:160px;">Remarques localité</th>
+                                <th style="min-width:130px;">Lat / Lon</th>
+                                <th style="min-width:160px;">Détermination 1</th>
+                                <th style="min-width:100px;">Statut det.</th>
+                                <th style="min-width:120px;">Déterminateur 1</th>
+                                <th style="min-width:110px;">Date det. 1</th>
+                                <th style="min-width:80px;">N° det.</th>
+                                <th style="min-width:80px;">N° inv.</th>
+                            </tr>
+                        </thead>
+                        <tbody id="s5-tbody">
+                            <tr><td colspan="12" class="text-center text-muted py-3">Chargement…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="alert alert-secondary">Aucun résultat — lancez la correction step05.</div>
+        {% endif %}
+    </div>
+
+</div><!-- /container -->
+
+<!-- Leaflet pour la carte -->
+{% if s5 and s5.has_geo %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+{% endif %}
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.9.4/Chart.min.js"></script>
+
+<script>
+/* ── Couleurs ─────────────────────────────────────────────────────────────── */
+const ZONE_COLORS  = {{ zone_colors | tojson }};
+const FIELD_COLORS = {{ field_colors | tojson }};
+
+function clsColor(cls, palette) {
+    return palette[cls] || '#6c757d';
+}
+
+function confClass(v) {
+    const f = parseFloat(v);
+    if (f >= 0.85) return 'conf-high';
+    if (f >= 0.60) return 'conf-med';
+    return 'conf-low';
+}
+
+/* ── Debounce ─────────────────────────────────────────────────────────────── */
+function debounce(fn, delay) {
+    let t;
+    return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), delay); };
+}
+
+/* ── Galerie générique ────────────────────────────────────────────────────── */
+function renderGallery(containerId, items, colorFn) {
+    const el = document.getElementById(containerId);
+    if (!el) return;
+    if (!items || items.length === 0) {
+        el.innerHTML = '<div class="text-muted small text-center py-3" style="grid-column:1/-1;">Aucun crop disponible.</div>';
+        return;
+    }
+    el.innerHTML = items.map(s => {
+        const color = colorFn(s);
+        const label = s.cls || s.zone || '';
+        const sub   = s.zone && s.cls ? s.zone : (s.collection || '');
+        return `<div class="crop-card" style="--cls-color:${color};">
+            <img class="crop-img" src="${s.url}" loading="lazy"
+                 onerror="this.style.background='#f3f4f6';this.style.height='60px';">
+            <div class="crop-footer">
+                <div class="crop-cls">${label}${sub ? ' <span style="opacity:.6;font-size:.6rem;">('+sub+')</span>' : ''}</div>
+                <span class="crop-fn" title="${s.filename}">${s.filename || ''}</span>
+                ${s.conf ? `<span class="${confClass(s.conf)}" style="font-size:.65rem;">${parseFloat(s.conf).toFixed(2)}</span>` : ''}
+            </div>
+        </div>`;
+    }).join('');
+}
+
+/* ── Step 1 ───────────────────────────────────────────────────────────────── */
+function loadS1() {
+    const cls = document.getElementById('s1-cls-filter')?.value || '';
+    const p = new URLSearchParams({ n: 8 });
+    if (cls) p.append('cls', cls);
+    fetch('/api/resultats/step01/samples?' + p)
+        .then(r => r.json())
+        .then(d => renderGallery('s1-gallery', d, s => '#3b82f6'));
+}
+
+{% if s1 %}
+(function() {
+    const labels = [{% for item in s1.by_class %}"{{ item.cls }}"{% if not loop.last %},{% endif %}{% endfor %}];
+    const counts = [{% for item in s1.by_class %}{{ item.count }}{% if not loop.last %},{% endif %}{% endfor %}];
+    new Chart(document.getElementById('chartS1').getContext('2d'), {
+        type: 'doughnut',
+        data: { labels, datasets: [{ data: counts, backgroundColor: ['#3b82f6','#f59e0b','#10b981','#8b5cf6'], borderWidth:2 }] },
+        options: { responsive:true, legend:{ position:'bottom' } }
+    });
+    loadS1();
+})();
+{% endif %}
+
+/* ── Step 2 ───────────────────────────────────────────────────────────────── */
+function loadS2() {
+    const zone = document.getElementById('s2-zone-filter')?.value || '';
+    const p = new URLSearchParams({ n: 8 });
+    if (zone) p.append('zone', zone);
+    fetch('/api/resultats/step02/samples?' + p)
+        .then(r => r.json())
+        .then(d => renderGallery('s2-gallery', d, s => clsColor(s.zone, ZONE_COLORS)));
+}
+
+{% if s2 %}
+(function() {
+    const labels = [{% for item in s2.by_class %}"{{ item.cls }}"{% if not loop.last %},{% endif %}{% endfor %}];
+    const counts = [{% for item in s2.by_class %}{{ item.count }}{% if not loop.last %},{% endif %}{% endfor %}];
+    const colors = labels.map(l => ZONE_COLORS[l] || '#6c757d');
+    new Chart(document.getElementById('chartS2').getContext('2d'), {
+        type: 'doughnut',
+        data: { labels, datasets: [{ data: counts, backgroundColor: colors, borderWidth:2 }] },
+        options: { responsive:true, legend:{ position:'bottom' } }
+    });
+    loadS2();
+})();
+{% endif %}
+
+/* ── Step 3 ───────────────────────────────────────────────────────────────── */
+function loadS3() {
+    const zone = document.getElementById('s3-zone-filter')?.value || '';
+    const cls  = document.getElementById('s3-cls-filter')?.value  || '';
+    const p = new URLSearchParams({ n: 8 });
+    if (zone) p.append('zone', zone);
+    if (cls)  p.append('cls', cls);
+    fetch('/api/resultats/step03/samples?' + p)
+        .then(r => r.json())
+        .then(d => renderGallery('s3-gallery', d, s => clsColor(s.cls, FIELD_COLORS)));
+}
+
+{% if s3 %}
+(function() {
+    const labels = [{% for item in s3.by_class %}"{{ item.cls }}"{% if not loop.last %},{% endif %}{% endfor %}];
+    const counts = [{% for item in s3.by_class %}{{ item.count }}{% if not loop.last %},{% endif %}{% endfor %}];
+    const colors = labels.map(l => FIELD_COLORS[l] || '#8b5cf6');
+    new Chart(document.getElementById('chartS3').getContext('2d'), {
+        type: 'doughnut',
+        data: { labels, datasets: [{ data: counts, backgroundColor: colors, borderWidth:2 }] },
+        options: { responsive:true, legend:{ position:'bottom' } }
+    });
+    loadS3();
+})();
+{% endif %}
+
+/* ── Step 4 ───────────────────────────────────────────────────────────────── */
+function loadS4() {
+    const cls = document.getElementById('s4-cls')?.value || '';
+    const q   = document.getElementById('s4-q')?.value  || '';
+    const p   = new URLSearchParams({ n: 50 });
+    if (cls) p.append('cls', cls);
+    if (q)   p.append('q', q);
+    fetch('/api/resultats/step04/rows?' + p)
+        .then(r => r.json())
+        .then(d => {
+            const el = document.getElementById('s4-count');
+            if (el) el.textContent = d.total + ' lignes';
+            const tb = document.getElementById('s4-tbody');
+            if (!tb) return;
+            if (!d.rows || d.rows.length === 0) {
+                tb.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">Aucun résultat.</td></tr>';
+                return;
+            }
+            const colors = FIELD_COLORS;
+            tb.innerHTML = d.rows.map(r => {
+                const color = colors[r.field_class] || '#6c757d';
+                return `<tr>
+                    <td class="text-muted" style="font-size:.72rem;">${r.specimen_id||''}</td>
+                    <td><span class="status-badge" style="background:${color}22;color:${color};">${r.field_class||''}</span></td>
+                    <td>${r.text || '<span class="text-muted fst-italic">vide</span>'}</td>
+                </tr>`;
+            }).join('');
+        });
+}
+
+{% if s4 %}
+(function() {
+    const labels = [{% for item in s4.by_class %}"{{ item.cls }}"{% if not loop.last %},{% endif %}{% endfor %}];
+    const counts = [{% for item in s4.by_class %}{{ item.count }}{% if not loop.last %},{% endif %}{% endfor %}];
+    const colors = labels.map(l => FIELD_COLORS[l] || '#10b981');
+    new Chart(document.getElementById('chartS4').getContext('2d'), {
+        type: 'horizontalBar',
+        data: { labels, datasets: [{ data: counts, backgroundColor: colors }] },
+        options: { responsive:true, legend:{ display:false },
+                   scales:{ xAxes:[{ ticks:{beginAtZero:true} }] } }
+    });
+    loadS4();
+})();
+{% endif %}
+
+/* ── Step 5 ───────────────────────────────────────────────────────────────── */
+function statusBadge(val) {
+    if (!val) return '';
+    return `<span class="status-badge status-${val}">${val}</span>`;
+}
+
+function loadS5() {
+    const status = document.getElementById('s5-status')?.value || '';
+    const q      = document.getElementById('s5-q')?.value      || '';
+    const p      = new URLSearchParams({ n: 50 });
+    if (status) p.append('status', status);
+    if (q)      p.append('q', q);
+    fetch('/api/resultats/step05/rows?' + p)
+        .then(r => r.json())
+        .then(d => {
+            const el = document.getElementById('s5-count');
+            if (el) el.textContent = d.total + ' spécimens';
+            const tb = document.getElementById('s5-tbody');
+            if (!tb) return;
+            if (!d.rows || d.rows.length === 0) {
+                tb.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">Aucun résultat.</td></tr>';
+                return;
+            }
+            tb.innerHTML = d.rows.map(r => {
+                const latlon = (r.latitude && r.longitude)
+                    ? `<a href="https://www.openstreetmap.org/?mlat=${r.latitude}&mlon=${r.longitude}" target="_blank" class="text-decoration-none" style="font-size:.72rem;">${parseFloat(r.latitude).toFixed(4)}, ${parseFloat(r.longitude).toFixed(4)} <i class="fas fa-external-link-alt" style="font-size:.55rem;"></i></a>`
+                    : statusBadge(r.localite_statut || 'VIDE');
+                const gbifKey = r.determination_1_gbif_key
+                    ? `<a href="https://www.gbif.org/species/${r.determination_1_gbif_key}" target="_blank" style="font-size:.6rem;" class="text-decoration-none ms-1"><i class="fas fa-external-link-alt"></i></a>`
+                    : '';
+                return `<tr>
+                    <td class="text-muted" style="font-size:.7rem;">${r.specimen_id||''}</td>
+                    <td>${r.collecteur||''}</td>
+                    <td style="white-space:nowrap;">${r.date_collecte||''} ${statusBadge(r.date_collecte_statut)}</td>
+                    <td>${r.localite||''}</td>
+                    <td class="text-muted" style="font-size:.7rem;">${r.localite_remarques||''}</td>
+                    <td style="white-space:nowrap;">${latlon}</td>
+                    <td>${r.determination_1||''}${gbifKey}</td>
+                    <td>${statusBadge(r.determination_1_statut)}</td>
+                    <td>${r.determinateur_1||''}</td>
+                    <td style="white-space:nowrap;">${r.date_determination_1||''} ${statusBadge(r.date_determination_1_statut)}</td>
+                    <td class="text-muted">${r.numero_determination_1||''}</td>
+                    <td class="text-muted" style="font-size:.7rem;">${r.numero_inventaire||''}</td>
+                </tr>`;
+            }).join('');
+        });
+}
+
+{% if s5 %}
+loadS5();
+{% endif %}
+
+/* ── Carte Leaflet ────────────────────────────────────────────────────────── */
+{% if s5 and s5.has_geo %}
+(function() {
+    const points = {{ s5.geo_points | tojson }};
+    const map = L.map('map').setView([20, 0], 2);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap', maxZoom: 18
+    }).addTo(map);
+
+    // Clustering léger : markers groupés si > 200 points
+    points.forEach(p => {
+        if (!p.lat || !p.lon) return;
+        L.circleMarker([parseFloat(p.lat), parseFloat(p.lon)], {
+            radius: 5, fillColor: '#f97316', color: '#fff',
+            weight: 1, opacity: 1, fillOpacity: 0.8
+        }).bindPopup(`<small>${p.label}</small>`).addTo(map);
+    });
+
+    // Ajuster la vue sur les données
+    if (points.length > 0) {
+        const latlngs = points
+            .filter(p => p.lat && p.lon)
+            .map(p => [parseFloat(p.lat), parseFloat(p.lon)]);
+        if (latlngs.length > 0) map.fitBounds(latlngs, { padding:[20,20] });
+    }
+})();
+{% endif %}
+</script>
+</body>
+</html>

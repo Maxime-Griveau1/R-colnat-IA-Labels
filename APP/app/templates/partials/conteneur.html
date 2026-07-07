@@ -1,0 +1,1650 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+    <head>
+        {% include "partials/css.html" %}
+
+        <meta charset="utf-8" />
+        <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+        <script src="https://d3js.org/d3.v6.min.js"></script>
+
+        <meta name="description" content="" />
+        <meta name="author" content="" />
+        <title>Récolnat - L'IA pour réduire la dette descriptive - Tableau de commande</title>
+        <link href="https://cdn.jsdelivr.net/npm/simple-datatables@7.1.2/dist/style.min.css" rel="stylesheet" />
+        <link href="/statics/css/styles_3.css" rel="stylesheet" />
+        <script src="https://use.fontawesome.com/releases/v6.3.0/js/all.js" crossorigin="anonymous"></script>
+
+        <style>
+            .workflow-card {
+                transition: all 0.3s ease;
+                border-left: 4px solid #0d6efd;
+            }
+            .workflow-card:hover {
+                box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            }
+            .step-badge {
+                font-size: 0.85rem;
+                padding: 0.4rem 0.8rem;
+            }
+            .config-section {
+                background-color: #f8f9fa;
+                border-radius: 8px;
+                padding: 1.5rem;
+                margin-bottom: 1rem;
+            }
+            .status-dot {
+                width: 10px; height: 10px;
+                border-radius: 50%;
+                display: inline-block;
+                margin-right: 5px;
+                vertical-align: middle;
+            }
+            .status-dot.ok   { background: #198754; }
+            .status-dot.ko   { background: #dc3545; }
+            .status-dot.warn { background: #ffc107; }
+            .step01-sub-card {
+                border: 1px solid #dee2e6;
+                border-radius: 6px;
+                padding: 0.9rem;
+                margin-bottom: 0.6rem;
+                background: #fff;
+            }
+            /* Terminal SSE */
+            .term-ts   { color: #6a9955; user-select: none; }
+            .term-info { color: #9cdcfe; }
+            .term-success { color: #4ec9b0; font-weight: bold; }
+            .term-error   { color: #f48771; font-weight: bold; }
+            .term-line { padding: 1px 0; white-space: pre-wrap; word-break: break-all; }
+        </style>
+    </head>
+
+    <body class="sb-nav-fixed">
+        <nav class="sb-topnav navbar navbar-expand navbar-dark bg-dark">
+            <div class="container-fluid">
+                <h1 class="ms-3 text-light mb-0">Récolnat - L'IA pour réduire la dette descriptive - Tableau de commande</h1>
+            </div>
+        </nav>
+
+        <div id="layoutSidenav">
+            <div id="layoutSidenav_nav">
+                <nav class="sb-sidenav accordion sb-sidenav-dark" id="sidenavAccordion">
+                    <div class="sb-sidenav-menu">
+                        <div class="nav">
+                            <div class="sb-sidenav-menu-heading">Navigation</div>
+                            <a class="nav-link active" href="{{ url_for('accueil') }}">
+                                <div class="sb-nav-link-icon"><i class="fas fa-sliders-h"></i></div>
+                                Tableau de commande
+                            </a>
+                            <a class="nav-link" href="{{ url_for('resultats') }}">
+                                <div class="sb-nav-link-icon"><i class="fas fa-chart-line"></i></div>
+                                Résultats &amp; visualisation
+                            </a>
+                            <a class="nav-link" href="{{ url_for('demo') }}">
+                                <div class="sb-nav-link-icon"><i class="fas fa-play-circle"></i></div>
+                                Démo interactive
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- Messages flash -->
+                    <div class="sb-sidenav-footer p-3">
+                        {% with messages = get_flashed_messages(with_categories=true) %}
+                        {% if messages %}
+                        {% for category, message in messages %}
+                        <div class="alert alert-{{category}} alert-dismissible fade show mb-2" role="alert">
+                            <small>{{ message }}</small>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="alert"></button>
+                        </div>
+                        {% endfor %}
+                        {% endif %}
+                        {% endwith %}
+                    </div>
+                </nav>
+            </div>
+
+            <div id="layoutSidenav_content">
+                <main>
+                    <div class="container-fluid px-4">
+
+                        <div class="row mt-4 mb-3">
+                            <div class="col-12">
+                                <h2 class="mb-0">Workflow de traitement des étiquettes</h2>
+                                <p class="text-muted mt-1">Chaque étape peut être lancée indépendamment.</p>
+                            </div>
+                        </div>
+
+                        {% block body %}
+
+                        <!-- Grille des étapes -->
+                        <div class="row">
+
+                            <!-- ── Étape 0 : Prétraitement ──────────────────────────────── -->
+                            <div class="col-lg-6 mb-4">
+                                <div class="card workflow-card h-100">
+                                    <div class="card-header bg-primary text-white">
+                                        <h5 class="mb-0">Étape 0 : Prétraitement des images</h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <!-- État courant -->
+                                        <div class="mb-3 p-2 rounded" style="background:#f0f4ff;font-size:.82rem;line-height:1.7;">
+                                            <div>
+                                                <span class="status-dot {{ 'ok' if preprocess_stats.herbarium > 0 else 'ko' }}"></span>
+                                                <strong>Herbier :</strong>
+                                                {% if preprocess_stats.herbarium > 0 %}
+                                                    {{ preprocess_stats.herbarium }} images prétraitées
+                                                {% else %}non traité{% endif %}
+                                            </div>
+                                            <div>
+                                                <span class="status-dot {{ 'ok' if preprocess_stats.entomology > 0 else 'ko' }}"></span>
+                                                <strong>Entomologie :</strong>
+                                                {% if preprocess_stats.entomology > 0 %}
+                                                    {{ preprocess_stats.entomology }} images prétraitées
+                                                {% else %}non traité{% endif %}
+                                            </div>
+                                        </div>
+                                        <p class="text-muted mb-3 small">Prétraitement des images sources : rehaussement de contraste, resize proportionnel avec letterbox.</p>
+                                        <form onsubmit="runAction(this,'pretraitement');return false;">
+                                            <div class="row g-2 mb-3">
+                                                <div class="col-3">
+                                                    <label class="form-label small mb-1">Max images par dossier</label>
+                                                    <input type="number" class="form-control form-control-sm" name="max_images" placeholder="Toutes" min="1">
+                                                    <small class="text-muted">Vide = toutes</small>
+                                                </div>
+                                                <div class="col-3">
+                                                    <label class="form-label small mb-1">Résolution cible</label>
+                                                    <select class="form-select form-select-sm" name="size">
+                                                        <option value="512">512 px — Rapide</option>
+                                                        <option value="640">640 px — Standard YOLO</option>
+                                                        <option value="768">768 px — Intermédiaire</option>
+                                                        <option value="896">896 px — Bonne densité</option>
+                                                        <option value="1024" selected>1024 px — Documents A4 ✓</option>
+                                                        <option value="1280">1280 px — Haute résolution</option>
+                                                        <option value="1536">1536 px — Maximum (RAM ↑)</option>
+                                                    </select>
+                                                    <small class="text-muted">Multiples de 32 (YOLO)</small>
+                                                </div>
+                                                <div class="col-3">
+                                                    <label class="form-label small mb-1">Sources</label>
+                                                    <div class="form-check">
+                                                        <input class="form-check-input" type="checkbox" name="source_herbarium" id="source_herbarium" checked>
+                                                        <label class="form-check-label small" for="source_herbarium">Herbier</label>
+                                                    </div>
+                                                    <div class="form-check">
+                                                        <input class="form-check-input" type="checkbox" name="source_entomology" id="source_entomology" checked>
+                                                        <label class="form-check-label small" for="source_entomology">Entomologie</label>
+                                                    </div>
+                                                </div>
+                                                <div class="col-3">
+                                                    <label class="form-label small mb-1">Opérations</label>
+                                                    <div class="form-check">
+                                                        <input class="form-check-input" type="checkbox" name="clahe" id="clahe" value="1" checked>
+                                                        <label class="form-check-label small" for="clahe">CLAHE <span class="text-muted">(contraste)</span></label>
+                                                    </div>
+                                                    <div class="form-check">
+                                                        <input class="form-check-input" type="checkbox" name="binarize" id="binarize" value="1">
+                                                        <label class="form-check-label small" for="binarize">Binarisation <span class="text-muted">(HTR classique)</span></label>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <button type="submit" class="btn btn-sm btn-primary">
+                                                <i class="fas fa-cogs me-1"></i>Lancer le prétraitement
+                                            </button>
+                                        </form>
+                                        <div class="mt-3">
+                                            <span class="badge bg-secondary step-badge">Input: in/00_source_images/</span>
+                                            <span class="badge bg-success step-badge ms-1">Output: out/step00_preprocessing/</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- ── Étape 2 : Reconnaissance du type d'étiquette (YOLO) ──── -->
+                            <div class="col-lg-6 mb-4">
+                                <div class="card workflow-card h-100" style="border-left-color:#198754;">
+                                    <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                                        <h5 class="mb-0">Étape 1 : Reconnaissance du type d'étiquette</h5>
+                                        <span class="badge bg-light text-success fw-bold">YOLO cls</span>
+                                    </div>
+                                    <div class="card-body">
+
+                                        <!-- État courant -->
+                                        <div class="mb-3 p-2 rounded" style="background:#f0faf4;font-size:.82rem;line-height:1.7;">
+                                            <div>
+                                                <span class="status-dot {{ 'ok' if dataset_stats else 'ko' }}"></span>
+                                                <strong>Dataset :</strong>
+                                                {% if dataset_stats %}
+                                                    {% set train = dataset_stats.get('train', {}) %}
+                                                    train={{ train.values()|sum }}
+                                                    ({% for cls, n in train.items() %}{{ cls }}={{ n }}{% if not loop.last %}, {% endif %}{% endfor %})
+                                                {% else %}non préparé{% endif %}
+                                            </div>
+                                            <div>
+                                                <span class="status-dot {{ 'ok' if model_status.exists else 'ko' }}"></span>
+                                                <strong>Modèle :</strong>
+                                                {% if model_status.exists %}
+                                                    best.pt
+                                                    {% if model_status.trained_at %}&mdash; entraîné le <strong>{{ model_status.trained_at }}</strong>{% endif %}
+                                                    {% if model_status.accuracy %} &mdash; acc. top-1 : <strong>{{ "%.1f"|format(model_status.accuracy * 100) }}%</strong>{% endif %}
+                                                    {% if model_status.epochs_done %} ({{ model_status.epochs_done }} epochs){% endif %}
+                                                {% else %}non entraîné{% endif %}
+                                            </div>
+                                            <div>
+                                                <span class="status-dot {{ 'ok' if prediction_stats else 'ko' }}"></span>
+                                                <strong>Prédictions :</strong>
+                                                {% if prediction_stats %}
+                                                    {{ prediction_stats.total }} images classifiées
+                                                    {% if prediction_stats.uncertain %} &mdash; {{ prediction_stats.uncertain }} incertaines{% endif %}
+                                                    {% if prediction_stats.csv_mtime %}<span class="text-muted"> ({{ prediction_stats.csv_mtime }})</span>{% endif %}
+                                                {% else %}aucune{% endif %}
+                                            </div>
+                                        </div>
+
+                                        <!-- Sous-action 1 : Préparer le dataset -->
+                                        <div class="step01-sub-card">
+                                            <h6 class="mb-1"><span class="badge bg-primary me-1">1</span>Préparer le dataset</h6>
+                                            <p class="text-muted small mb-2">Répartit les images sources en train / val / test (70 / 15 / 15).</p>
+                                            <form onsubmit="runAction(this,'step01/preparer-dataset');return false;" class="d-flex align-items-end gap-2">
+                                                <div>
+                                                    <label class="form-label small mb-1">Max images par classe</label>
+                                                    <input type="number" class="form-control form-control-sm" name="max_images"
+                                                        placeholder="Toutes" min="1" style="width:130px;">
+                                                    <small class="text-muted">Vide = toutes</small>
+                                                </div>
+                                                <div class="pb-3">
+                                                    <button type="submit" class="btn btn-sm btn-outline-primary">
+                                                        <i class="fas fa-layer-group me-1"></i>Préparer
+                                                    </button>
+                                                </div>
+                                            </form>
+                                        </div>
+
+                                        <!-- Sous-action 2 : Entraîner -->
+                                        <div class="step01-sub-card">
+                                            <h6 class="mb-1"><span class="badge bg-primary me-1">2</span>Entraîner le modèle</h6>
+                                            <p class="text-muted small mb-2">Fine-tune YOLOv11 classification sur le dataset préparé.</p>
+                                            <form onsubmit="runAction(this,'step01/entrainer');return false;">
+                                                <div class="row g-2 mb-2">
+                                                    <div class="col-3">
+                                                        <label class="form-label small mb-1">Epochs</label>
+                                                        <input type="number" class="form-control form-control-sm" name="epochs" value="75" min="1">
+                                                    </div>
+                                                    <div class="col-3">
+                                                        <label class="form-label small mb-1">Taille img</label>
+                                                        <input type="number" class="form-control form-control-sm" name="imgsz" value="384" min="32" step="32">
+                                                    </div>
+                                                    <div class="col-2">
+                                                        <label class="form-label small mb-1">Patience</label>
+                                                        <input type="number" class="form-control form-control-sm" name="patience" value="20" min="1">
+                                                    </div>
+                                                    <div class="col-2">
+                                                        <label class="form-label small mb-1">Batch</label>
+                                                        <input type="number" class="form-control form-control-sm" name="batch" value="16" min="1">
+                                                    </div>
+                                                    <div class="col-2">
+                                                        <label class="form-label small mb-1">Modèle</label>
+                                                        <select class="form-select form-select-sm" name="model_name">
+                                                            <option value="yolo11n-cls.pt">nano</option>
+                                                            <option value="yolo11s-cls.pt" selected>small</option>
+                                                            <option value="yolo11m-cls.pt">medium</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                                <button type="submit" class="btn btn-sm btn-outline-primary">
+                                                    <i class="fas fa-brain me-1"></i>Entraîner
+                                                </button>
+                                                <small class="text-muted ms-2">~10–30 min selon le hardware</small>
+                                            </form>
+                                        </div>
+
+                                        <!-- Sous-action 3 : Classifier -->
+                                        <div class="step01-sub-card mb-0">
+                                            <h6 class="mb-1"><span class="badge bg-primary me-1">3</span>Classifier les images</h6>
+                                            <p class="text-muted small mb-2">Prédit le type d'étiquette pour chaque image source.</p>
+                                            <form onsubmit="runAction(this,'step01/predire');return false;">
+                                                <div class="row g-2 mb-2">
+                                                    <div class="col-6">
+                                                        <label class="form-label small mb-1">Source</label>
+                                                        <select class="form-select form-select-sm" name="predict_source">
+                                                            <option value="both">Toutes</option>
+                                                            <option value="herbarium">Herbier uniquement</option>
+                                                            <option value="entomology">Entomologie uniquement</option>
+                                                        </select>
+                                                    </div>
+                                                    <div class="col-6">
+                                                        <label class="form-label small mb-1">Seuil confiance</label>
+                                                        <input type="number" class="form-control form-control-sm" name="conf_threshold" value="0.70" min="0" max="1" step="0.05">
+                                                        <small class="text-muted">En dessous &rarr; "uncertain"</small>
+                                                    </div>
+                                                </div>
+                                                <button type="submit" class="btn btn-sm btn-outline-success">
+                                                    <i class="fas fa-tags me-1"></i>Classifier
+                                                </button>
+                                            </form>
+                                        </div>
+
+                                    </div><!-- /card-body -->
+                                </div>
+                            </div>
+
+                            <!-- ── Étape 3 : Annotation des zones (Label Studio) ─────── -->
+                            <div class="col-lg-12 mb-4">
+                                <div class="card workflow-card h-100" style="border-left-color:#fd7e14;">
+                                    <div class="card-header d-flex justify-content-between align-items-center"
+                                         style="background:#fd7e14; color:#fff;">
+                                        <h5 class="mb-0">Étape 2 : Annotation des zones — Label Studio</h5>
+                                        <span class="badge bg-light text-dark fw-bold">YOLO det</span>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row">
+
+                                            <!-- ── État du modèle de détection ── -->
+                                            <div class="col-12 mb-3">
+                                                <div class="p-2 rounded" style="background:#fff8f0;font-size:.82rem;line-height:1.7;">
+                                                    <div>
+                                                        <span class="status-dot {{ 'ok' if det_dataset_stats else 'ko' }}"></span>
+                                                        <strong>Dataset :</strong>
+                                                        {% if det_dataset_stats %}
+                                                            train={{ det_dataset_stats.get('train', 0) }}, val={{ det_dataset_stats.get('val', 0) }}, test={{ det_dataset_stats.get('test', 0) }}
+                                                        {% else %}non préparé{% endif %}
+                                                    </div>
+                                                    <div>
+                                                        <span class="status-dot {{ 'ok' if det_model_status.exists else 'ko' }}"></span>
+                                                        <strong>Modèle :</strong>
+                                                        {% if det_model_status.exists %}
+                                                            best.pt
+                                                            {% if det_model_status.trained_at %}&mdash; entraîné le <strong>{{ det_model_status.trained_at }}</strong>{% endif %}
+                                                            {% if det_model_status.map50 %} &mdash; mAP50 : <strong>{{ "%.1f"|format(det_model_status.map50 * 100) }}%</strong>{% endif %}
+                                                            {% if det_model_status.map50_95 %} / mAP50-95 : <strong>{{ "%.1f"|format(det_model_status.map50_95 * 100) }}%</strong>{% endif %}
+                                                            {% if det_model_status.epochs_done %} ({{ det_model_status.epochs_done }} epochs){% endif %}
+                                                        {% else %}non entraîné{% endif %}
+                                                    </div>
+                                                    <div>
+                                                        <span class="status-dot {{ 'ok' if det_prediction_stats else 'ko' }}"></span>
+                                                        <strong>Prédictions :</strong>
+                                                        {% if det_prediction_stats %}
+                                                            {{ det_prediction_stats.total_images }} images analysées &mdash;
+                                                            {{ det_prediction_stats.total_boxes }} zones détectées
+                                                            {% if det_prediction_stats.csv_mtime %}<span class="text-muted"> ({{ det_prediction_stats.csv_mtime }})</span>{% endif %}
+                                                        {% else %}aucune{% endif %}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <!-- Colonne gauche : config + état + actions -->
+                                            <div class="col-lg-6">
+
+                                                <!-- État Label Studio (chargé en JS) -->
+                                                <div id="ls-status-bar" class="mb-3 p-2 rounded"
+                                                     style="background:#fff8f0;font-size:.82rem;line-height:1.8;">
+                                                    <div>
+                                                        <span class="status-dot warn" id="ls-dot-server"></span>
+                                                        <strong>Serveur LS :</strong> <span id="ls-txt-server">vérification…</span>
+                                                        <a id="ls-open-link" href="#" target="_blank" class="ms-2 d-none btn btn-sm btn-outline-warning py-0 px-2">
+                                                            <i class="fas fa-external-link-alt me-1"></i>Ouvrir LS
+                                                        </a>
+                                                    </div>
+                                                    <div>
+                                                        <span class="status-dot warn" id="ls-dot-auth"></span>
+                                                        <strong>Auth :</strong> <span id="ls-txt-auth">—</span>
+                                                    </div>
+                                                    <div>
+                                                        <span class="status-dot warn" id="ls-dot-project"></span>
+                                                        <strong>Projet :</strong> <span id="ls-txt-project">—</span>
+                                                        <a id="ls-project-link" href="#" target="_blank" class="ms-2 d-none btn btn-sm btn-outline-warning py-0 px-2">
+                                                            <i class="fas fa-tasks me-1"></i>Annoter
+                                                        </a>
+                                                    </div>
+                                                    <div>
+                                                        <span class="status-dot warn" id="ls-dot-annot"></span>
+                                                        <strong>Annotations :</strong> <span id="ls-txt-annot">—</span>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Config API -->
+                                                <div class="step01-sub-card">
+                                                    <h6 class="mb-1"><span class="badge bg-warning text-dark me-1">⚙</span>Configuration Label Studio</h6>
+                                                    <p class="text-muted small mb-2">
+                                                        L'URL API est configurée via <code>LABEL_STUDIO_URL</code> (Docker interne).<br>
+                                                        Pour changer l'URL d'accès navigateur, modifiez <code>LABEL_STUDIO_PUBLIC_URL</code> dans le docker-compose.
+                                                    </p>
+                                                    <form id="ls-config-form" class="row g-2 mt-1">
+                                                        <div class="col-12">
+                                                            <label class="form-label small mb-1">
+                                                                Clé API
+                                                                <small class="text-muted">(Paramètres LS → Account → Access Token)</small>
+                                                            </label>
+                                                            <input type="password" class="form-control form-control-sm" name="api_key"
+                                                                   id="ls-apikey-input" placeholder="…">
+                                                        </div>
+                                                        <div class="col-12">
+                                                            <button type="button" class="btn btn-sm btn-outline-warning"
+                                                                    onclick="saveLsConfig()">
+                                                                <i class="fas fa-save me-1"></i>Enregistrer &amp; tester
+                                                            </button>
+                                                        </div>
+                                                    </form>
+                                                </div>
+                                            </div><!-- /col gauche -->
+
+                                            <!-- Colonne droite : pipeline annotation -->
+                                            <div class="col-lg-6">
+
+                                                <!-- 1. Créer le projet -->
+                                                <div class="step01-sub-card">
+                                                    <h6 class="mb-1"><span class="badge bg-warning text-dark me-1">1</span>Créer / ouvrir le projet</h6>
+                                                    <p class="text-muted small mb-2">
+                                                        Crée le projet <em>"Récolnat - Annotation des zones"</em> avec les classes :
+                                                        <code>collecte, determination, tampon, numero_inventaire, graines, notes, dessin, specimen, logo</code>
+                                                    </p>
+                                                    <form onsubmit="runAction(this,'step02/create-project');return false;">
+                                                        <button type="submit" class="btn btn-sm btn-outline-warning">
+                                                            <i class="fas fa-folder-plus me-1"></i>Créer / ouvrir
+                                                        </button>
+                                                    </form>
+                                                </div>
+
+                                                <!-- 2. Importer les images -->
+                                                <div class="step01-sub-card">
+                                                    <h6 class="mb-1"><span class="badge bg-warning text-dark me-1">2</span>Importer les images</h6>
+                                                    <p class="text-muted small mb-2">
+                                                        Importe les images <strong>herbier et entomologie</strong> dans le projet LS.<br>
+                                                        <span class="text-success" id="ls-img-source"></span>
+                                                    </p>
+                                                    <form onsubmit="runAction(this,'step02/import-images');return false;">
+                                                        <div class="d-flex gap-2 align-items-end mb-2">
+                                                            <div>
+                                                                <label class="form-label small mb-1">Max images</label>
+                                                                <input type="number" class="form-control form-control-sm"
+                                                                       name="max_images" placeholder="Toutes" min="1" style="width:110px;">
+                                                            </div>
+                                                            <div class="form-check mb-1">
+                                                                <input type="checkbox" class="form-check-input" id="clear-first" name="clear_first" value="true">
+                                                                <label class="form-check-label small" for="clear-first">Vider d'abord</label>
+                                                            </div>
+                                                        </div>
+                                                        <button type="submit" class="btn btn-sm btn-outline-warning">
+                                                            <i class="fas fa-file-import me-1"></i>Importer
+                                                        </button>
+                                                    </form>
+                                                </div>
+
+                                                <!-- 3. Exporter → YOLO -->
+                                                <div class="step01-sub-card">
+                                                    <h6 class="mb-1"><span class="badge bg-warning text-dark me-1">3</span>Exporter les annotations → YOLO</h6>
+                                                    <p class="text-muted small mb-2">Récupère les annotations et génère le dataset YOLO détection.</p>
+                                                    <form onsubmit="runAction(this,'step02/export-yolo');return false;">
+                                                        <button type="submit" class="btn btn-sm btn-outline-warning">
+                                                            <i class="fas fa-file-export me-1"></i>Exporter
+                                                        </button>
+                                                    </form>
+                                                </div>
+
+                                                <!-- 4. Entraîner YOLO détection -->
+                                                <div class="step01-sub-card">
+                                                    <h6 class="mb-1"><span class="badge bg-warning text-dark me-1">4</span>Entraîner YOLO détection</h6>
+                                                    <p class="text-muted small mb-2">Fine-tune YOLOv11 pour la localisation des zones.</p>
+                                                    <form onsubmit="runAction(this,'step02/train-detection');return false;">
+                                                        <div class="row g-2 mb-2">
+                                                            <div class="col-3">
+                                                                <label class="form-label small mb-1">Epochs</label>
+                                                                <input type="number" class="form-control form-control-sm" name="epochs" value="150" min="1">
+                                                            </div>
+                                                            <div class="col-3">
+                                                                <label class="form-label small mb-1">Taille img</label>
+                                                                <input type="number" class="form-control form-control-sm" name="imgsz" value="640" min="32" step="32">
+                                                            </div>
+                                                            <div class="col-2">
+                                                                <label class="form-label small mb-1">Patience</label>
+                                                                <input type="number" class="form-control form-control-sm" name="patience" value="30" min="1">
+                                                            </div>
+                                                            <div class="col-2">
+                                                                <label class="form-label small mb-1">Batch</label>
+                                                                <input type="number" class="form-control form-control-sm" name="batch" value="8" min="1">
+                                                            </div>
+                                                            <div class="col-2">
+                                                                <label class="form-label small mb-1">Modèle</label>
+                                                                <select class="form-select form-select-sm" name="model_name">
+                                                                    <option value="yolo11n.pt">nano</option>
+                                                                    <option value="yolo11s.pt" selected>small</option>
+                                                                    <option value="yolo11m.pt">medium</option>
+                                                                </select>
+                                                            </div>
+                                                        </div>
+                                                        <button type="submit" class="btn btn-sm btn-outline-warning">
+                                                            <i class="fas fa-brain me-1"></i>Entraîner
+                                                        </button>
+                                                        <small class="text-muted ms-2">~10–60 min selon dataset</small>
+                                                    </form>
+                                                </div>
+
+                                                <!-- 5. Appliquer le modèle sur le dataset -->
+                                                <div class="step01-sub-card mb-0">
+                                                    <h6 class="mb-1"><span class="badge bg-warning text-dark me-1">5</span>Appliquer le modèle sur le dataset</h6>
+                                                    <p class="text-muted small mb-2">
+                                                        Détecte les zones (collecte, determination, tampon, etc.) sur toutes les images herbier et entomologie.<br>
+                                                        Génère un CSV de résultats et les crops par classe.
+                                                    </p>
+                                                    <form onsubmit="runAction(this,'step02/predict');return false;">
+                                                        <div class="row g-2 mb-2">
+                                                            <div class="col-5">
+                                                                <label class="form-label small mb-1">Source images</label>
+                                                                <select class="form-select form-select-sm" name="source">
+                                                                    <option value="preprocessed">Prétraitées (1024×1024)</option>
+                                                                    <option value="source">Sources originales</option>
+                                                                </select>
+                                                            </div>
+                                                            <div class="col-4">
+                                                                <label class="form-label small mb-1">Conf. min.</label>
+                                                                <input type="number" class="form-control form-control-sm" name="conf"
+                                                                       value="0.25" min="0.01" max="0.99" step="0.05">
+                                                            </div>
+                                                            <div class="col-3 d-flex align-items-end pb-1">
+                                                                <div class="form-check">
+                                                                    <input class="form-check-input" type="checkbox" name="save_crops" id="save-crops" value="true" checked>
+                                                                    <label class="form-check-label small" for="save-crops">Crops</label>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <button type="submit" class="btn btn-sm btn-outline-warning"
+                                                                {% if not det_model_status.exists %}disabled title="Entraînez d'abord le modèle"{% endif %}>
+                                                            <i class="fas fa-search me-1"></i>Détecter les zones
+                                                        </button>
+                                                    </form>
+                                                </div>
+
+                                            </div><!-- /col droite -->
+                                        </div><!-- /row -->
+                                    </div><!-- /card-body -->
+                                </div>
+                            </div>
+
+                            <!-- ── Étape 3 : Détection des champs de métadonnées ──── -->
+                            <div class="col-lg-12 mb-4">
+                                <div class="card workflow-card h-100" style="border-left-color:#6f42c1;">
+                                    <div class="card-header d-flex justify-content-between align-items-center"
+                                         style="background:#6f42c1; color:#fff;">
+                                        <h5 class="mb-0">Étape 3 : Détection des champs de métadonnées</h5>
+                                        <span class="badge bg-light text-dark fw-bold">2 × YOLO det</span>
+                                    </div>
+                                    <div class="card-body">
+
+                                        <!-- Architecture -->
+                                        <div class="mb-3 p-2 rounded" style="background:#f5f0ff;font-size:.82rem;line-height:1.8;">
+                                            <strong>Architecture à deux modèles distincts par type de zone :</strong><br>
+                                            <span class="badge me-1" style="background:#3a86d4;">collecte</span>
+                                            Crops <code>DET/collecte/</code> → classes : <code>collecteur</code>, <code>date_collecte</code>, <code>localite</code>
+                                            &mdash; modèle : <code>step03_collecte/models/</code><br>
+                                            <span class="badge me-1" style="background:#c0399b;">détermination</span>
+                                            Crops <code>DET/determination/</code> → classes : <code>determination</code>, <code>date_determination</code>, <code>determinateur</code>, <code>statut_nomenclatural</code>
+                                            &mdash; modèle : <code>step03_determination/models/</code><br>
+                                            <span class="text-muted">Les crops produits par les <strong>deux</strong> modèles alimentent ensuite le même pipeline HTR (step04).</span>
+                                        </div>
+
+                                        <!-- État des deux projets LS -->
+                                        <div class="row mb-3 g-2">
+                                            <div class="col-md-6">
+                                                <div class="p-2 rounded" style="background:#eef4fb;font-size:.82rem;line-height:1.7;border-left:3px solid #3a86d4;">
+                                                    <strong>Projet collecte</strong>
+                                                    <div><span class="status-dot warn" id="f-dot-col"></span> <span id="f-txt-col">—</span>
+                                                        <a id="f-link-col" href="#" target="_blank" class="ms-1 d-none btn btn-sm py-0 px-1" style="color:#3a86d4;border-color:#3a86d4;font-size:.75rem;"><i class="fas fa-tasks"></i> Annoter</a>
+                                                    </div>
+                                                    <div><span class="status-dot warn" id="f-dot-col-annot"></span> <span id="f-txt-col-annot">—</span></div>
+                                                    <div><span class="status-dot warn" id="f-dot-col-model"></span> Modèle : <span id="f-txt-col-model">—</span></div>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <div class="p-2 rounded" style="background:#fbeef6;font-size:.82rem;line-height:1.7;border-left:3px solid #c0399b;">
+                                                    <strong>Projet détermination</strong>
+                                                    <div><span class="status-dot warn" id="f-dot-det"></span> <span id="f-txt-det">—</span>
+                                                        <a id="f-link-det" href="#" target="_blank" class="ms-1 d-none btn btn-sm py-0 px-1" style="color:#c0399b;border-color:#c0399b;font-size:.75rem;"><i class="fas fa-tasks"></i> Annoter</a>
+                                                    </div>
+                                                    <div><span class="status-dot warn" id="f-dot-det-annot"></span> <span id="f-txt-det-annot">—</span></div>
+                                                    <div><span class="status-dot warn" id="f-dot-det-model"></span> Modèle : <span id="f-txt-det-model">—</span></div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="row">
+                                            <!-- Colonne gauche : config LS -->
+                                            <div class="col-lg-4">
+                                                <div class="step01-sub-card">
+                                                    <h6 class="mb-1"><span class="badge me-1" style="background:#6f42c1;">⚙</span>Label Studio</h6>
+                                                    <p class="text-muted small mb-2">Même instance que l'étape 2 — deux projets créés automatiquement (un par zone).</p>
+                                                    <div style="font-size:.82rem;line-height:1.7;" class="mb-2">
+                                                        <span class="status-dot warn" id="f-dot-server"></span>
+                                                        <strong>Serveur :</strong> <span id="f-txt-server">vérification…</span>
+                                                    </div>
+                                                    <form onsubmit="runAction(this,'step03/create-project');return false;">
+                                                        <button type="submit" class="btn btn-sm btn-outline-secondary" style="border-color:#6f42c1;color:#6f42c1;">
+                                                            <i class="fas fa-folder-plus me-1"></i>Créer les 2 projets
+                                                        </button>
+                                                    </form>
+                                                </div>
+
+                                                <!-- Sélection équilibrée -->
+                                                <div class="step01-sub-card">
+                                                    <h6 class="mb-1"><span class="badge me-1" style="background:#6f42c1;">1</span>Importer les images</h6>
+                                                    <p class="text-muted small mb-2">
+                                                        Sélection équilibrée sur 4 axes : <em>herbier×collecte</em>, <em>herbier×détermination</em>, <em>entomologie×collecte</em>, <em>entomologie×détermination</em>.<br>
+                                                        Chaque zone est importée dans <strong>son propre projet</strong> LS.<br>
+                                                        <span class="text-warning-emphasis" style="font-size:.78rem;">⚠ Détection collection par regex : <code>EC\d+</code> → entomologie, <code>P\d+</code> → herbier. Adapter <code>_collection_of()</code> pour de nouvelles collections.</span><br>
+                                                        <span class="text-success" id="f-crops-source"></span>
+                                                    </p>
+                                                    <form onsubmit="runAction(this,'step03/import-images');return false;">
+                                                        <div class="row g-2 mb-2">
+                                                            <div class="col-7">
+                                                                <label class="form-label small mb-1">Max images (total)</label>
+                                                                <input type="number" class="form-control form-control-sm" name="max_images" placeholder="Toutes" min="4">
+                                                            </div>
+                                                            <div class="col-5 d-flex align-items-end pb-1">
+                                                                <div class="form-check">
+                                                                    <input type="checkbox" class="form-check-input" id="f-clear-first" name="clear_first" value="true">
+                                                                    <label class="form-check-label small" for="f-clear-first">Vider d'abord</label>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <button type="submit" class="btn btn-sm btn-outline-secondary" style="border-color:#6f42c1;color:#6f42c1;">
+                                                            <i class="fas fa-file-import me-1"></i>Importer
+                                                        </button>
+                                                    </form>
+                                                </div>
+                                            </div>
+
+                                            <!-- Colonne droite : pipeline export → train → predict -->
+                                            <div class="col-lg-8">
+
+                                                <!-- 2. Exporter → 2 datasets YOLO -->
+                                                <div class="step01-sub-card">
+                                                    <h6 class="mb-1"><span class="badge me-1" style="background:#6f42c1;">2</span>Exporter les annotations → 2 datasets YOLO</h6>
+                                                    <p class="text-muted small mb-2">
+                                                        Exporte les deux projets LS séparément.<br>
+                                                        <code>step03_collecte/dataset/</code> — <code>step03_determination/dataset/</code>
+                                                    </p>
+                                                    <form onsubmit="runAction(this,'step03/export-yolo');return false;">
+                                                        <button type="submit" class="btn btn-sm btn-outline-secondary" style="border-color:#6f42c1;color:#6f42c1;">
+                                                            <i class="fas fa-file-export me-1"></i>Exporter
+                                                        </button>
+                                                    </form>
+                                                </div>
+
+                                                <!-- 3. Entraîner -->
+                                                <div class="step01-sub-card">
+                                                    <h6 class="mb-1"><span class="badge me-1" style="background:#6f42c1;">3</span>Entraîner les modèles</h6>
+                                                    <form onsubmit="runAction(this,'step03/train');return false;">
+                                                        <div class="row g-2 mb-2">
+                                                            <div class="col-3">
+                                                                <label class="form-label small mb-1">Zone</label>
+                                                                <select class="form-select form-select-sm" name="zone">
+                                                                    <option value="both" selected>Les deux</option>
+                                                                    <option value="collecte">Collecte</option>
+                                                                    <option value="determination">Détermination</option>
+                                                                </select>
+                                                            </div>
+                                                            <div class="col-2">
+                                                                <label class="form-label small mb-1">Epochs</label>
+                                                                <input type="number" class="form-control form-control-sm" name="epochs" value="150" min="1">
+                                                            </div>
+                                                            <div class="col-2">
+                                                                <label class="form-label small mb-1">Img</label>
+                                                                <input type="number" class="form-control form-control-sm" name="imgsz" value="640" min="32" step="32">
+                                                            </div>
+                                                            <div class="col-2">
+                                                                <label class="form-label small mb-1">Patience</label>
+                                                                <input type="number" class="form-control form-control-sm" name="patience" value="30" min="1">
+                                                            </div>
+                                                            <div class="col-1">
+                                                                <label class="form-label small mb-1">Batch</label>
+                                                                <input type="number" class="form-control form-control-sm" name="batch" value="4" min="1">
+                                                            </div>
+                                                            <div class="col-2">
+                                                                <label class="form-label small mb-1">Modèle</label>
+                                                                <select class="form-select form-select-sm" name="model_name">
+                                                                    <option value="yolo11n.pt" selected>nano</option>
+                                                                    <option value="yolo11s.pt">small</option>
+                                                                    <option value="yolo11m.pt">medium</option>
+                                                                </select>
+                                                            </div>
+                                                        </div>
+                                                        <button type="submit" class="btn btn-sm btn-outline-secondary" style="border-color:#6f42c1;color:#6f42c1;">
+                                                            <i class="fas fa-brain me-1"></i>Entraîner
+                                                        </button>
+                                                        <small class="text-muted ms-2">Les deux modèles s'entraînent séquentiellement</small>
+                                                    </form>
+                                                </div>
+
+                                                <!-- 4. Prédire -->
+                                                <div class="step01-sub-card mb-0">
+                                                    <h6 class="mb-1"><span class="badge me-1" style="background:#6f42c1;">4</span>Détecter les champs</h6>
+                                                    <p class="text-muted small mb-2">
+                                                        Le modèle est sélectionné automatiquement selon le dossier parent du crop (<code>collecte/</code> ou <code>determination/</code>).<br>
+                                                        Les crops de sortie des deux modèles alimentent le même pipeline HTR (step04).
+                                                    </p>
+                                                    <form onsubmit="runAction(this,'step03/predict');return false;">
+                                                        <div class="row g-2 mb-2">
+                                                            <div class="col-4">
+                                                                <label class="form-label small mb-1">Conf. min.</label>
+                                                                <input type="number" class="form-control form-control-sm" name="conf"
+                                                                       value="0.25" min="0.01" max="0.99" step="0.05">
+                                                            </div>
+                                                            <div class="col-4 d-flex align-items-end pb-1">
+                                                                <div class="form-check">
+                                                                    <input class="form-check-input" type="checkbox" name="save_crops" id="f-save-crops" value="true">
+                                                                    <label class="form-check-label small" for="f-save-crops">Sauvegarder les crops</label>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <button type="submit" class="btn btn-sm btn-outline-secondary" style="border-color:#6f42c1;color:#6f42c1;">
+                                                            <i class="fas fa-search me-1"></i>Détecter les champs
+                                                        </button>
+                                                    </form>
+                                                </div>
+
+                                            </div><!-- /col droite -->
+                                        </div><!-- /row -->
+                                    </div><!-- /card-body -->
+                                </div>
+                            </div>
+
+                            <!-- ── Étape 4 : Extraction HTR (GLM-OCR) ──────────────── -->
+                            <div class="col-lg-6 mb-4">
+                                <div class="card workflow-card h-100" style="border-left-color:#20c997;">
+                                    <div class="card-header d-flex justify-content-between align-items-center"
+                                         style="background:#20c997; color:#fff;">
+                                        <h5 class="mb-0">Étape 4 : Extraction HTR</h5>
+                                        <span class="badge bg-light text-dark fw-bold">GLM-OCR</span>
+                                    </div>
+                                    <div class="card-body">
+
+                                        <!-- État courant (mis à jour par JS toutes les 30 s) -->
+                                        <div class="mb-3 p-2 rounded" style="background:#f0fdf8;font-size:.82rem;line-height:1.7;">
+                                            <div>
+                                                <span class="status-dot ko" id="htr-dot-crops"></span>
+                                                <strong>Crops step03 :</strong>
+                                                <span id="htr-txt-crops">vérification…</span>
+                                            </div>
+                                            <div>
+                                                <span class="status-dot ko" id="htr-dot-transcriptions"></span>
+                                                <strong>Transcriptions :</strong>
+                                                <span id="htr-txt-transcriptions">vérification…</span>
+                                            </div>
+                                            <div>
+                                                <span class="status-dot ko" id="htr-dot-grouped"></span>
+                                                <strong>CSV groupé :</strong>
+                                                <span id="htr-txt-grouped">vérification…</span>
+                                            </div>
+                                        </div>
+
+                                        <!-- Action 1 : tester le prétraitement -->
+                                        <div class="step01-sub-card mb-2">
+                                            <h6 class="mb-1"><span class="badge me-1" style="background:#20c997;">1</span>Tester le prétraitement image</h6>
+                                            <p class="text-muted small mb-2">
+                                                Visualise l'effet du prétraitement sur un crop aléatoire avant de lancer l'HTR.
+                                                Ajuste les paramètres jusqu'à obtenir une lisibilité optimale.
+                                            </p>
+                                            <div class="row g-2 mb-2" id="preproc-params">
+                                                <div class="col-6">
+                                                    <label class="form-label small mb-1">Classe de champ</label>
+                                                    <select class="form-select form-select-sm" id="pp-field-class">
+                                                        <option value="">Aléatoire (toutes classes)</option>
+                                                        {% for cls in (htr_parts_stats or {}).keys() %}
+                                                        <option value="{{ cls }}">{{ cls }}</option>
+                                                        {% endfor %}
+                                                    </select>
+                                                </div>
+                                                <div class="col-6">
+                                                    <label class="form-label small mb-1">Hauteur cible HTR (px)</label>
+                                                    <input type="number" class="form-control form-control-sm" id="pp-target-height"
+                                                           value="128" min="32" max="512" step="16">
+                                                </div>
+                                                <div class="col-6 d-flex align-items-center gap-3 pt-1">
+                                                    <div class="form-check form-switch mb-0">
+                                                        <input class="form-check-input" type="checkbox" id="pp-binarize" checked>
+                                                        <label class="form-check-label small" for="pp-binarize">Binarisation Sauvola</label>
+                                                    </div>
+                                                </div>
+                                                <div class="col-6 d-flex align-items-center gap-3 pt-1">
+                                                    <div class="form-check form-switch mb-0">
+                                                        <input class="form-check-input" type="checkbox" id="pp-deskew" checked>
+                                                        <label class="form-check-label small" for="pp-deskew">Deskew (correction inclinaison)</label>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <button class="btn btn-sm btn-outline-secondary mb-2" onclick="previewPreprocess()"
+                                                    {% if not htr_parts_stats %}disabled title="Aucun crop disponible"{% endif %}>
+                                                <i class="fas fa-eye me-1"></i>Tirer un crop au hasard
+                                            </button>
+
+                                            <!-- Zone d'aperçu -->
+                                            <div id="preproc-preview" class="d-none mt-2">
+                                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                                    <small class="text-muted" id="preproc-filename"></small>
+                                                    <small class="text-muted" id="preproc-sizes"></small>
+                                                </div>
+                                                <div class="row g-2">
+                                                    <div class="col-6">
+                                                        <p class="small fw-bold mb-1 text-center">Original</p>
+                                                        <img id="preproc-orig" src="" class="img-fluid rounded border" style="max-height:160px;width:100%;object-fit:contain;background:#eee;">
+                                                    </div>
+                                                    <div class="col-6">
+                                                        <p class="small fw-bold mb-1 text-center">Prétraité</p>
+                                                        <img id="preproc-proc" src="" class="img-fluid rounded border" style="max-height:160px;width:100%;object-fit:contain;background:#eee;">
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div id="preproc-error" class="text-danger small d-none mt-1"></div>
+                                        </div>
+
+                                        <!-- Action 2 : lancer l'extraction -->
+                                        <div class="step01-sub-card mb-0">
+                                            <h6 class="mb-1"><span class="badge me-1" style="background:#20c997;">2</span>Lancer l'extraction HTR</h6>
+                                            <p class="text-muted small mb-2">
+                                                Les mêmes paramètres de prétraitement sont appliqués à tous les crops avant transcription.
+                                                Génère <code>transcriptions_raw.csv</code> et <code>extracted_text.csv</code>.
+                                            </p>
+                                            <form onsubmit="runAction(this,'step04/run');return false;" id="htr-run-form">
+                                                <!-- Paramètres prétraitement (synchronisés depuis le panneau 1) -->
+                                                <input type="hidden" name="binarize"      id="htr-binarize"      value="true">
+                                                <input type="hidden" name="deskew"        id="htr-deskew"        value="true">
+                                                <input type="hidden" name="target_height" id="htr-target-height" value="128">
+                                                <div class="row g-2 mb-2">
+                                                    <div class="col-12">
+                                                        <label class="form-label small mb-1">Modèle</label>
+                                                        <input type="text" class="form-control form-control-sm"
+                                                               name="model_id" value="zai-org/GLM-OCR">
+                                                        <small class="text-muted">Identifiant HuggingFace</small>
+                                                    </div>
+                                                    <div class="col-6">
+                                                        <label class="form-label small mb-1">Max crops à traiter</label>
+                                                        <input type="number" class="form-control form-control-sm"
+                                                               name="max_crops" placeholder="Tous" min="1">
+                                                        <small class="text-muted">Vide = tous les crops</small>
+                                                    </div>
+                                                    <div class="col-6">
+                                                        <label class="form-label small mb-1">Device</label>
+                                                        <select class="form-select form-select-sm" name="device">
+                                                            <option value="auto">Auto (GPU si dispo)</option>
+                                                            <option value="cpu">CPU</option>
+                                                            <option value="cuda">CUDA (GPU)</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                                <button type="submit" class="btn btn-sm"
+                                                        style="background:#20c997;color:#fff;border-color:#20c997;"
+                                                        {% if not htr_parts_stats %}disabled title="Lancez d'abord la prédiction step03"{% endif %}>
+                                                    <i class="fas fa-spell-check me-1"></i>Transcrire
+                                                </button>
+                                                <small class="text-muted ms-2">Durée variable selon le nombre de crops</small>
+                                            </form>
+                                        </div>
+
+                                        <div class="mt-3">
+                                            <span class="badge bg-secondary step-badge">Input: out/step03_*/parts/</span>
+                                            <span class="badge bg-success step-badge ms-1">Output: out/step04_extract_text/</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- ── Étape 5 : Post-traitement / correction ──────────────── -->
+                            <div class="col-lg-6 mb-4">
+                                <div class="card workflow-card h-100" style="border-left-color:#e67e22;">
+                                    <div class="card-header d-flex justify-content-between align-items-center"
+                                         style="background:#e67e22; color:#fff;">
+                                        <h5 class="mb-0">Étape 5 : Post-traitement &amp; correction</h5>
+                                        <span class="badge bg-light text-dark fw-bold">GBIF · OSM</span>
+                                    </div>
+                                    <div class="card-body">
+
+                                        <!-- État courant -->
+                                        <div class="mb-3 p-2 rounded" style="background:#fff8f0;font-size:.82rem;line-height:1.7;">
+                                            <div>
+                                                <span class="status-dot {{ 'ok' if htr_stats else 'ko' }}"></span>
+                                                <strong>CSV HTR (input) :</strong>
+                                                {% if htr_stats %}
+                                                    {{ htr_stats.total_specimens }} spécimens disponibles
+                                                    {% if htr_stats.raw_csv_mtime %}<span class="text-muted">({{ htr_stats.raw_csv_mtime }})</span>{% endif %}
+                                                {% else %}aucun — lancez d'abord l'étape 4{% endif %}
+                                            </div>
+                                            <div>
+                                                <span class="status-dot {{ 'ok' if correct_stats else 'ko' }}"></span>
+                                                <strong>CSV corrigé (output) :</strong>
+                                                {% if correct_stats %}
+                                                    {{ correct_stats.total_specimens }} spécimens traités
+                                                    {% if correct_stats.csv_mtime %}<span class="text-muted">({{ correct_stats.csv_mtime }})</span>{% endif %}
+                                                {% else %}non généré{% endif %}
+                                            </div>
+                                        </div>
+
+                                        <!-- Action : lancer la correction -->
+                                        <div class="step01-sub-card mb-0">
+                                            <h6 class="mb-1"><span class="badge me-1" style="background:#e67e22;">1</span>Lancer le post-traitement</h6>
+                                            <p class="text-muted small mb-2">
+                                                Normalise les dates, valide la taxonomie via <strong>GBIF</strong>,
+                                                géocode les localités via <strong>Nominatim (OSM)</strong>,
+                                                vérifie les numéros d'inventaire.
+                                            </p>
+                                            <form onsubmit="runAction(this,'step05/run');return false;">
+                                                <div class="row g-2 mb-2">
+                                                    <div class="col-7">
+                                                        <label class="form-label small mb-1">Max spécimens à traiter</label>
+                                                        <input type="number" class="form-control form-control-sm"
+                                                               name="max_rows" placeholder="Tous" min="1">
+                                                        <small class="text-muted">Vide = tous</small>
+                                                    </div>
+                                                </div>
+                                                <button type="submit" class="btn btn-sm"
+                                                        style="background:#e67e22;color:#fff;border-color:#e67e22;"
+                                                        {% if not htr_stats %}disabled title="Lancez d'abord l'HTR step04"{% endif %}>
+                                                    <i class="fas fa-magic me-1"></i>Corriger
+                                                </button>
+                                                <small class="text-muted ms-2">~1 s / spécimen (appels API)</small>
+                                            </form>
+                                        </div>
+
+                                        <div class="mt-3">
+                                            <span class="badge bg-secondary step-badge">Input: out/step04_extract_text/extracted_text.csv</span>
+                                            <span class="badge bg-success step-badge ms-1">Output: out/step05_correct/corrected.csv</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div><!-- /row grille -->
+
+                        <!-- ── Résultats Étape 1 (visible dès qu'une classification a tourné) ── -->
+                        {% if prediction_stats and prediction_stats.by_class %}
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <div class="card">
+                                    <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                                        <h6 class="mb-0">
+                                            <i class="fas fa-chart-bar me-2 text-success"></i>
+                                            Résultats — Étape 1 : Reconnaissance du type d'étiquette
+                                        </h6>
+                                        <small class="text-muted">{{ prediction_stats.total }} images &bull; {{ prediction_stats.uncertain }} incertaines</small>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row">
+                                            <div class="col-12">
+                                                <table class="table table-sm table-hover mb-0">
+                                                    <thead class="table-light">
+                                                        <tr>
+                                                            <th>Type détecté</th>
+                                                            <th class="text-end">Images</th>
+                                                            <th class="text-end">%</th>
+                                                            <th class="text-end">Conf. moy.</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {% for row in prediction_stats.by_class %}
+                                                        <tr>
+                                                            <td><span class="badge bg-secondary">{{ row.class }}</span></td>
+                                                            <td class="text-end">{{ row.count }}</td>
+                                                            <td class="text-end">{{ "%.1f"|format(row.count / prediction_stats.total * 100) }}%</td>
+                                                            <td class="text-end">
+                                                                <span class="badge {{ 'bg-success' if row.avg_conf >= 0.85 else ('bg-warning text-dark' if row.avg_conf >= 0.70 else 'bg-danger') }}">
+                                                                    {{ "%.1f"|format(row.avg_conf * 100) }}%
+                                                                </span>
+                                                            </td>
+                                                        </tr>
+                                                        {% endfor %}
+                                                        {% if prediction_stats.uncertain > 0 %}
+                                                        <tr class="table-warning">
+                                                            <td><span class="badge bg-warning text-dark">uncertain</span></td>
+                                                            <td class="text-end">{{ prediction_stats.uncertain }}</td>
+                                                            <td class="text-end">{{ "%.1f"|format(prediction_stats.uncertain / prediction_stats.total * 100) }}%</td>
+                                                            <td class="text-end">—</td>
+                                                        </tr>
+                                                        {% endif %}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <!-- ── Résultats Étape 2 (visible dès qu'une détection a tourné) ── -->
+                        {% if det_prediction_stats and det_prediction_stats.by_class %}
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <div class="card">
+                                    <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                                        <h6 class="mb-0">
+                                            <i class="fas fa-chart-bar me-2 text-warning"></i>
+                                            Résultats — Étape 2 : Détection des zones
+                                        </h6>
+                                        <small class="text-muted">
+                                            {{ det_prediction_stats.total_images }} images &bull;
+                                            {{ det_prediction_stats.total_boxes }} zones
+                                            {% if det_prediction_stats.csv_mtime %}&bull; {{ det_prediction_stats.csv_mtime }}{% endif %}
+                                        </small>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row">
+                                            <div class="col-12">
+                                                <table class="table table-sm table-hover mb-0">
+                                                    <thead class="table-light">
+                                                        <tr>
+                                                            <th>Zone détectée</th>
+                                                            <th class="text-end">Occurrences</th>
+                                                            <th class="text-end">% des zones</th>
+                                                            <th class="text-end">Moy. / image</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {% for row in det_prediction_stats.by_class %}
+                                                        <tr>
+                                                            <td><span class="badge bg-secondary">{{ row.class }}</span></td>
+                                                            <td class="text-end">{{ row.count }}</td>
+                                                            <td class="text-end">{{ "%.1f"|format(row.count / det_prediction_stats.total_boxes * 100) }}%</td>
+                                                            <td class="text-end">{{ "%.2f"|format(row.count / det_prediction_stats.total_images) }}</td>
+                                                        </tr>
+                                                        {% endfor %}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <!-- ── Résultats Étape 3 (visible dès qu'une détection champs a tourné) ── -->
+                        {% if fields_prediction_stats and fields_prediction_stats.by_class %}
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <div class="card">
+                                    <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                                        <h6 class="mb-0">
+                                            <i class="fas fa-chart-bar me-2" style="color:#6f42c1;"></i>
+                                            Résultats — Étape 3 : Détection des champs de métadonnées
+                                        </h6>
+                                        <small class="text-muted">
+                                            {% if fields_prediction_stats.total_images %}{{ fields_prediction_stats.total_images }} images &bull;{% endif %}
+                                            {{ fields_prediction_stats.total_boxes }} champs
+                                            {% if fields_prediction_stats.by_zone %}
+                                            &bull;
+                                            {% for z, n in fields_prediction_stats.by_zone.items() %}{{ z }}={{ n }}{% if not loop.last %}, {% endif %}{% endfor %}
+                                            {% endif %}
+                                            {% if fields_prediction_stats.csv_mtime %}&bull; {{ fields_prediction_stats.csv_mtime }}{% endif %}
+                                        </small>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row mb-3">
+                                            <div class="col-12">
+                                                <table class="table table-sm table-hover mb-0">
+                                                    <thead class="table-light">
+                                                        <tr>
+                                                            <th>Champ détecté</th>
+                                                            <th class="text-end">Occurrences</th>
+                                                            <th class="text-end">% des champs</th>
+                                                            <th class="text-end">Moy. / image</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {% for row in fields_prediction_stats.by_class %}
+                                                        <tr>
+                                                            <td><span class="badge bg-secondary">{{ row.class }}</span></td>
+                                                            <td class="text-end">{{ row.count }}</td>
+                                                            <td class="text-end">{{ "%.1f"|format(row.count / fields_prediction_stats.total_boxes * 100) }}%</td>
+                                                            <td class="text-end">{% if fields_prediction_stats.total_images %}{{ "%.2f"|format(row.count / fields_prediction_stats.total_images) }}{% else %}—{% endif %}</td>
+                                                        </tr>
+                                                        {% endfor %}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+
+                                        <!-- Visualisation des crops détectés -->
+                                        <hr class="my-2">
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <h6 class="mb-0 small fw-bold">Aperçu des crops détectés</h6>
+                                            <div class="d-flex gap-2 align-items-center">
+                                                <select class="form-select form-select-sm" id="crop-filter-zone" style="width:auto;" onchange="loadCropSamples()">
+                                                    <option value="">Toutes les zones</option>
+                                                    <option value="collecte">collecte</option>
+                                                    <option value="determination">détermination</option>
+                                                </select>
+                                                <select class="form-select form-select-sm" id="crop-filter-cls" style="width:auto;" onchange="loadCropSamples()">
+                                                    <option value="">Toutes les classes</option>
+                                                    {% for row in fields_prediction_stats.by_class %}
+                                                    <option value="{{ row.class }}">{{ row.class }}</option>
+                                                    {% endfor %}
+                                                </select>
+                                                <button class="btn btn-sm btn-outline-secondary" onclick="loadCropSamples()">
+                                                    <i class="fas fa-random me-1"></i>Nouveaux exemples
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div id="crop-gallery" class="row g-2">
+                                            <div class="col-12 text-muted small text-center py-2">
+                                                Cliquez sur "Nouveaux exemples" pour afficher des crops.
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <!-- ── Résultats Étape 4 (visible dès qu'une transcription a tourné) ── -->
+                        {% if htr_stats and htr_stats.by_class %}
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <div class="card">
+                                    <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                                        <h6 class="mb-0">
+                                            <i class="fas fa-chart-bar me-2" style="color:#20c997;"></i>
+                                            Résultats — Étape 4 : Extraction HTR
+                                        </h6>
+                                        <small class="text-muted">
+                                            {{ htr_stats.total_crops }} crops &bull;
+                                            {{ htr_stats.total_specimens }} spécimens
+                                            {% if htr_stats.raw_csv_mtime %}&bull; {{ htr_stats.raw_csv_mtime }}{% endif %}
+                                        </small>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row">
+                                            <div class="col-12">
+                                                <table class="table table-sm table-hover mb-0">
+                                                    <thead class="table-light">
+                                                        <tr>
+                                                            <th>Champ</th>
+                                                            <th class="text-end">Crops transcrits</th>
+                                                            <th class="text-end">% du total</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {% for row in htr_stats.by_class %}
+                                                        <tr>
+                                                            <td><span class="badge bg-secondary">{{ row.class }}</span></td>
+                                                            <td class="text-end">{{ row.count }}</td>
+                                                            <td class="text-end">{{ "%.1f"|format(row.count / htr_stats.total_crops * 100) }}%</td>
+                                                        </tr>
+                                                        {% endfor %}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <!-- ── Résultats Étape 5 ── -->
+                        {% if correct_stats and correct_stats.by_col %}
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <div class="card">
+                                    <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                                        <h6 class="mb-0">
+                                            <i class="fas fa-chart-bar me-2" style="color:#e67e22;"></i>
+                                            Résultats — Étape 5 : Post-traitement
+                                        </h6>
+                                        <small class="text-muted">
+                                            {{ correct_stats.total_specimens }} spécimens
+                                            {% if correct_stats.csv_mtime %}&bull; {{ correct_stats.csv_mtime }}{% endif %}
+                                        </small>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row">
+                                            {% set statut_colors = {'OK': 'success', 'CORRIGÉ': 'primary', 'AMBIGU': 'warning', 'ERREUR': 'danger', 'NON_TROUVÉ_GBIF': 'secondary', 'NON_GÉOCODÉ': 'secondary', 'VIDE': 'light'} %}
+                                            {% set col_labels = {
+                                                'date_collecte_statut': 'Date collecte',
+                                                'date_determination_statut': 'Date détermination',
+                                                'determination_statut': 'Détermination (GBIF)',
+                                                'localite_statut': 'Localité (OSM)',
+                                                'numero_inventaire_statut': 'N° inventaire'
+                                            } %}
+                                            {% for col, counts in correct_stats.by_col.items() %}
+                                            <div class="col-md-4 mb-3">
+                                                <p class="small fw-bold mb-1">{{ col_labels.get(col, col) }}</p>
+                                                {% for statut, n in counts.items()|sort %}
+                                                <span class="badge bg-{{ statut_colors.get(statut, 'secondary') }} {% if statut == 'VIDE' %}text-dark border{% endif %} me-1 mb-1">
+                                                    {{ statut }} : {{ n }}
+                                                </span>
+                                                {% endfor %}
+                                            </div>
+                                            {% endfor %}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <!-- ── Panneau terminal SSE ─────────────────────────────── -->
+                        <div id="terminal-panel" class="row mb-4 d-none">
+                            <div class="col-12">
+                                <div class="card border-0 shadow-sm">
+                                    <div class="card-header d-flex justify-content-between align-items-center"
+                                         style="background:#1e1e1e;">
+                                        <span class="text-white">
+                                            <i class="fas fa-terminal me-2"></i>
+                                            <strong>Console</strong>
+                                            <span id="terminal-status" class="ms-3 small"></span>
+                                        </span>
+                                        <button class="btn btn-sm btn-outline-light py-0"
+                                                onclick="document.getElementById('terminal-panel').classList.add('d-none')">
+                                            <i class="fas fa-times"></i>
+                                        </button>
+                                    </div>
+                                    <div id="terminal-output"
+                                         style="background:#1e1e1e;color:#d4d4d4;font-family:'Courier New',monospace;
+                                                font-size:.78rem;padding:1rem;height:300px;overflow-y:auto;
+                                                border-left:3px solid #198754;">
+                                    </div>
+                                    <div class="card-footer d-flex align-items-center gap-3"
+                                         style="background:#2d2d2d;border-top:1px solid #444;">
+                                        <button id="terminal-refresh"
+                                                class="btn btn-sm btn-success d-none"
+                                                onclick="location.reload()">
+                                            <i class="fas fa-sync me-1"></i>Rafraîchir le tableau de bord
+                                        </button>
+                                        <small class="text-secondary">Les résultats s'afficheront après rafraîchissement.</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {% endblock %}
+
+                    </div>
+                </main>
+
+                <footer class="py-4 bg-light mt-auto">
+                    <div class="container-fluid px-4">
+                        <div class="d-flex align-items-center justify-content-between small">
+                            <div class="text-muted">Récolnat - L'IA pour réduire la dette descriptive - Tableau de commande</div>
+                            <div><span class="badge bg-info">Juin 2026</span></div>
+                        </div>
+                    </div>
+                </footer>
+            </div>
+        </div>
+
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
+        <script src="https://cdn.jsdelivr.net/npm/simple-datatables@7.1.2/dist/umd/simple-datatables.min.js" crossorigin="anonymous"></script>
+
+        <script>
+        /* ── Label Studio status polling ──────────────────────────────────── */
+
+        function setDot(id, state) {   // state: 'ok' | 'ko' | 'warn'
+            const el = document.getElementById(id);
+            if (el) { el.className = 'status-dot ' + state; }
+        }
+        function setText(id, html) {
+            const el = document.getElementById(id);
+            if (el) el.innerHTML = html;
+        }
+
+        function refreshLsStatus() {
+            fetch('/step02/status')
+                .then(r => r.json())
+                .then(d => {
+                    // Serveur
+                    setDot('ls-dot-server', d.is_up ? 'ok' : 'ko');
+                    setText('ls-txt-server', d.is_up
+                        ? '<span class="text-success">En ligne (' + d.ls_url + ')</span>'
+                        : '<span class="text-danger">Hors ligne &mdash; démarrez Label Studio</span>');
+                    const openLink = document.getElementById('ls-open-link');
+                    if (openLink) {
+                        openLink.href = d.ls_url;
+                        openLink.classList.toggle('d-none', !d.is_up);
+                    }
+                    // Auth
+                    const diag = d.token_diag || {};
+                    if (d.authed) {
+                        setDot('ls-dot-auth', 'ok');
+                        setText('ls-txt-auth', '<span class="text-success">Clé API valide (' + (diag.type || '') + ')</span>');
+                    } else if (!d.api_key_set) {
+                        setDot('ls-dot-auth', 'warn');
+                        setText('ls-txt-auth', 'Clé API non renseignée');
+                    } else if (diag.type === 'jwt_refresh') {
+                        setDot('ls-dot-auth', 'ko');
+                        setText('ls-txt-auth',
+                            '<span class="text-danger fw-bold">Token de type « refresh » — invalide pour l\'API.</span>' +
+                            '<div class="mt-1 text-warning small"><i class="fas fa-circle-info me-1"></i>' +
+                            'Dans Label Studio : <strong>Settings → Account &amp; Settings → Access Token</strong> ' +
+                            '→ copiez ou régénérez le token affiché.</div>');
+                    } else {
+                        setDot('ls-dot-auth', 'ko');
+                        setText('ls-txt-auth', '<span class="text-danger">Clé API invalide</span>' +
+                            (diag.msg ? '<div class="small text-muted mt-1">' + diag.msg + '</div>' : ''));
+                    }
+                    // Projet
+                    const hasProject = d.project_id != null;
+                    setDot('ls-dot-project', hasProject ? 'ok' : 'warn');
+                    setText('ls-txt-project', hasProject ? 'id=' + d.project_id : 'non créé');
+                    const projLink = document.getElementById('ls-project-link');
+                    if (projLink) {
+                        projLink.href = d.ls_url + '/projects/' + d.project_id + '/';
+                        projLink.classList.toggle('d-none', !hasProject);
+                    }
+                    // Annotations
+                    const s = d.stats;
+                    if (s && s.total_tasks > 0) {
+                        const pct = Math.round(s.annotated / s.total_tasks * 100);
+                        setDot('ls-dot-annot', pct >= 100 ? 'ok' : (pct > 0 ? 'warn' : 'ko'));
+                        setText('ls-txt-annot',
+                            s.annotated + ' / ' + s.total_tasks + ' images annotées (' + pct + '%)' +
+                            (s.skipped ? ' &mdash; ' + s.skipped + ' ignorées' : ''));
+                    } else {
+                        setDot('ls-dot-annot', 'ko');
+                        setText('ls-txt-annot', s && s.total_tasks === 0 ? 'Aucune image importée' : '—');
+                    }
+                    // Source des images + images traitées
+                    const srcEl = document.getElementById('ls-img-source');
+                    if (srcEl && d.image_source) {
+                        const avail = d.available_images || 0;
+                        const treated = d.treated_images || 0;
+                        let txt = avail + ' images disponibles'
+                            + ' (' + (d.available_herbarium || 0) + ' herbier · ' + (d.available_entomology || 0) + ' entomologie)'
+                            + ' — source : ' + d.image_source;
+                        if (treated > 0)
+                            txt += ' — ' + treated + ' / ' + avail + ' images traitées';
+                        srcEl.textContent = txt;
+                    }
+                    // Préremplir les champs de config
+                    const urlInput = document.getElementById('ls-url-input');
+                    if (urlInput && !urlInput.value) urlInput.placeholder = d.ls_url;
+                })
+                .catch(() => {
+                    setDot('ls-dot-server', 'ko');
+                    setText('ls-txt-server', 'Erreur de connexion');
+                });
+        }
+
+        function saveLsConfig() {
+            const form = document.getElementById('ls-config-form');
+            const data = new FormData(form);
+            fetch('/step02/save-config', { method: 'POST', body: data })
+                .then(() => refreshLsStatus());
+        }
+
+        function refreshHtrStatus() {
+            fetch('/step04/status')
+                .then(r => r.json())
+                .then(d => {
+                    const ps = d.parts_stats || {};
+                    const totalCrops = Object.values(ps).reduce((s, n) => s + n, 0);
+                    setDot('htr-dot-crops', totalCrops > 0 ? 'ok' : 'ko');
+                    if (totalCrops > 0) {
+                        const detail = Object.entries(ps).map(([c, n]) => c + '=' + n).join(', ');
+                        setText('htr-txt-crops', totalCrops + ' crops (' + detail + ')');
+                    } else {
+                        setText('htr-txt-crops', 'aucun crop disponible');
+                    }
+
+                    const hs = d.htr_stats || {};
+                    const done = hs.total_crops || 0;
+                    setDot('htr-dot-transcriptions', done > 0 ? (done >= totalCrops ? 'ok' : 'warn') : 'ko');
+                    if (done > 0) {
+                        const pct = totalCrops > 0 ? Math.round(done / totalCrops * 100) : '?';
+                        let txt = done + ' / ' + totalCrops + ' crops transcrits (' + pct + '%)';
+                        if (hs.total_specimens) txt += ' &mdash; ' + hs.total_specimens + ' spécimens';
+                        if (hs.raw_csv_mtime)   txt += ' <span class="text-muted">(' + hs.raw_csv_mtime + ')</span>';
+                        setText('htr-txt-transcriptions', txt);
+                    } else {
+                        setText('htr-txt-transcriptions', 'aucune');
+                    }
+
+                    setDot('htr-dot-grouped', d.grouped_csv_exists ? 'ok' : 'ko');
+                    setText('htr-txt-grouped', d.grouped_csv_exists ? 'disponible' : 'non généré');
+                })
+                .catch(() => {});
+        }
+
+        // Rafraîchir le statut au chargement et toutes les 30 s
+        document.addEventListener('DOMContentLoaded', function () {
+            refreshLsStatus();
+            refreshFieldsStatus();
+            refreshHtrStatus();
+            setInterval(refreshLsStatus, 30000);
+            setInterval(refreshFieldsStatus, 30000);
+            setInterval(refreshHtrStatus, 30000);
+        });
+        </script>
+
+        <script>
+        /* ── Label Studio status — Étape 3 (champs) ──────────────────────── */
+        function refreshFieldsStatus() {
+            fetch('/step03/status')
+                .then(r => r.json())
+                .then(d => {
+                    setDot('f-dot-server', d.is_up ? 'ok' : 'ko');
+                    setText('f-txt-server', d.is_up
+                        ? '<span class="text-success">En ligne (' + d.ls_url + ')</span>'
+                        : '<span class="text-danger">Hors ligne</span>');
+
+                    // Mise à jour des deux projets
+                    const zones = {
+                        collecte:     { dotId: 'f-dot-col',  txtId: 'f-txt-col',  linkId: 'f-link-col',  dotAnnotId: 'f-dot-col-annot',  txtAnnotId: 'f-txt-col-annot',  dotModelId: 'f-dot-col-model',  txtModelId: 'f-txt-col-model'  },
+                        determination:{ dotId: 'f-dot-det',  txtId: 'f-txt-det',  linkId: 'f-link-det',  dotAnnotId: 'f-dot-det-annot',  txtAnnotId: 'f-txt-det-annot',  dotModelId: 'f-dot-det-model',  txtModelId: 'f-txt-det-model'  },
+                    };
+                    const projects = d.projects || {};
+                    Object.entries(zones).forEach(([zone, ids]) => {
+                        const p = projects[zone] || {};
+                        const pid = p.project_id;
+                        setDot(ids.dotId, pid != null ? 'ok' : 'warn');
+                        setText(ids.txtId, pid != null ? 'id=' + pid : 'non créé');
+                        const lnk = document.getElementById(ids.linkId);
+                        if (lnk) { lnk.href = d.ls_url + '/projects/' + pid + '/'; lnk.classList.toggle('d-none', pid == null); }
+
+                        const s = p.stats || {};
+                        if (s.total_tasks > 0) {
+                            const pct = Math.round(s.annotated / s.total_tasks * 100);
+                            setDot(ids.dotAnnotId, pct >= 100 ? 'ok' : (pct > 0 ? 'warn' : 'ko'));
+                            setText(ids.txtAnnotId, s.annotated + ' / ' + s.total_tasks + ' annotées (' + pct + '%)');
+                        } else {
+                            setDot(ids.dotAnnotId, 'ko');
+                            setText(ids.txtAnnotId, s.total_tasks === 0 ? 'Aucune image importée' : '—');
+                        }
+
+                        setDot(ids.dotModelId, p.model_exists ? 'ok' : 'ko');
+                        setText(ids.txtModelId, p.model_exists
+                            ? 'best.pt' + (p.model_trained_at ? ' — ' + p.model_trained_at : '')
+                            : 'non entraîné');
+                    });
+                    // Crops disponibles + crops déjà détectés
+                    const cropsEl = document.getElementById('f-crops-source');
+                    if (cropsEl) {
+                        const avail = d.available_images || 0;
+                        const treated = d.treated_crops || 0;
+                        const zones = d.zones || {};
+                        let txt = avail + ' images source';
+                        const zoneStr = Object.entries(zones).map(([z,n]) => z + '=' + n).join(' · ');
+                        if (zoneStr) txt += ' (' + zoneStr + ')';
+                        if (treated > 0) txt += ' — ' + treated + ' crops détectés';
+                        cropsEl.textContent = txt;
+                    }
+                })
+                .catch(() => { setDot('f-dot-server', 'ko'); });
+        }
+        </script>
+
+        <script>
+        /* ── Galerie crops step03 ─────────────────────────────────────────── */
+        const CLS_COLORS = {
+            collecteur: '#F44336', date_collecte: '#607D8B', localite: '#00BCD4',
+            determination: '#4CAF50', date_determination: '#FF9800',
+            determinateur: '#9C27B0', statut_nomenclatural: '#E91E63',
+        };
+
+        function loadCropSamples() {
+            const zone = document.getElementById('crop-filter-zone')?.value || '';
+            const cls  = document.getElementById('crop-filter-cls')?.value  || '';
+            const gallery = document.getElementById('crop-gallery');
+            if (!gallery) return;
+
+            gallery.innerHTML = '<div class="col-12 text-center py-2"><div class="spinner-border spinner-border-sm text-secondary"></div></div>';
+
+            const params = new URLSearchParams({ n: 4 });
+            if (zone) params.append('zone', zone);
+            if (cls)  params.append('cls',  cls);
+
+            fetch('/step03/sample-crops?' + params)
+                .then(r => r.json())
+                .then(d => {
+                    if (!d.samples || d.samples.length === 0) {
+                        gallery.innerHTML = '<div class="col-12 text-muted small text-center py-2">Aucun crop disponible — lancez d\'abord la prédiction step03 avec save_crops activé.</div>';
+                        return;
+                    }
+                    gallery.innerHTML = d.samples.map(s => {
+                        const color = CLS_COLORS[s.cls] || '#6f42c1';
+                        return `<div class="col-6 col-md-3">
+                            <div class="card h-100 border-0 shadow-sm">
+                                <img src="${s.url}" class="card-img-top"
+                                     style="object-fit:contain;max-height:120px;background:#f8f9fa;"
+                                     onerror="this.src='';this.style.display='none'">
+                                <div class="card-footer py-1 px-2" style="background:${color}18;border-top:2px solid ${color};">
+                                    <span class="badge" style="background:${color};font-size:.7rem;">${s.cls}</span>
+                                    <span class="badge bg-light text-dark ms-1" style="font-size:.65rem;">${s.zone}</span>
+                                    <div class="text-muted" style="font-size:.65rem;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;" title="${s.filename}">${s.filename}</div>
+                                </div>
+                            </div>
+                        </div>`;
+                    }).join('');
+                })
+                .catch(() => {
+                    gallery.innerHTML = '<div class="col-12 text-danger small text-center py-2">Erreur lors du chargement des crops.</div>';
+                });
+        }
+        </script>
+
+        <script>
+        /* ── Prétraitement HTR : aperçu avant/après ───────────────────────── */
+        function previewPreprocess() {
+            const fieldClass   = document.getElementById('pp-field-class').value;
+            const binarize     = document.getElementById('pp-binarize').checked;
+            const deskew       = document.getElementById('pp-deskew').checked;
+            const targetHeight = document.getElementById('pp-target-height').value;
+
+            // Synchronise les hidden inputs du formulaire HTR
+            document.getElementById('htr-binarize').value      = binarize;
+            document.getElementById('htr-deskew').value        = deskew;
+            document.getElementById('htr-target-height').value = targetHeight;
+
+            const preview = document.getElementById('preproc-preview');
+            const errDiv  = document.getElementById('preproc-error');
+            errDiv.classList.add('d-none');
+            preview.classList.add('d-none');
+
+            const fd = new FormData();
+            fd.append('field_class',   fieldClass);
+            fd.append('binarize',      binarize);
+            fd.append('deskew',        deskew);
+            fd.append('target_height', targetHeight);
+
+            fetch('/step04/preview-preprocess', { method: 'POST', body: fd })
+                .then(r => r.json())
+                .then(d => {
+                    if (d.error) {
+                        errDiv.textContent = d.error;
+                        errDiv.classList.remove('d-none');
+                        return;
+                    }
+                    document.getElementById('preproc-filename').textContent =
+                        d.field + ' / ' + d.filename;
+                    document.getElementById('preproc-sizes').textContent =
+                        'Original: ' + d.orig_size[0] + '×' + d.orig_size[1] + 'px  →  ' +
+                        'Prétraité: ' + d.proc_size[0] + '×' + d.proc_size[1] + 'px';
+                    document.getElementById('preproc-orig').src = 'data:image/jpeg;base64,' + d.original;
+                    document.getElementById('preproc-proc').src = 'data:image/jpeg;base64,' + d.processed;
+                    preview.classList.remove('d-none');
+                })
+                .catch(e => {
+                    errDiv.textContent = 'Erreur réseau : ' + e;
+                    errDiv.classList.remove('d-none');
+                });
+        }
+
+        // Synchronise les paramètres à chaque changement (pour que le run utilise les bons)
+        ['pp-binarize','pp-deskew'].forEach(id => {
+            document.getElementById(id)?.addEventListener('change', () => {
+                document.getElementById('htr-binarize').value = document.getElementById('pp-binarize').checked;
+                document.getElementById('htr-deskew').value   = document.getElementById('pp-deskew').checked;
+            });
+        });
+        document.getElementById('pp-target-height')?.addEventListener('change', () => {
+            document.getElementById('htr-target-height').value = document.getElementById('pp-target-height').value;
+        });
+        </script>
+
+        <script>
+        /* ── Terminal SSE ─────────────────────────────────────────────────── */
+        function runAction(formEl, action) {
+            const formData = new FormData(formEl);
+            const btn      = formEl.querySelector('button[type=submit]');
+            const origHtml = btn ? btn.innerHTML : '';
+
+            // Afficher le terminal
+            const panel  = document.getElementById('terminal-panel');
+            const output = document.getElementById('terminal-output');
+            const status = document.getElementById('terminal-status');
+            const refresh = document.getElementById('terminal-refresh');
+            panel.classList.remove('d-none');
+            output.innerHTML = '';
+            status.textContent = '';
+            refresh.classList.add('d-none');
+            panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+            if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>En cours…'; }
+
+            // Lancer le job via fetch (action = chemin complet, ex: "step01/entrainer")
+            fetch('/' + action, { method: 'POST', body: formData })
+                .then(r => {
+                    if (!r.ok) return r.json().then(d => { throw new Error(d.error || r.statusText); });
+                    return r.json();
+                })
+                .then(({ job_id }) => {
+                    appendLine(output, '▶ Démarrage de l\'opération…', 'info');
+                    const es = new EventSource('/stream/' + job_id);
+                    es.onmessage = function (e) {
+                        if (e.data === '__DONE__') {
+                            es.close();
+                            appendLine(output, '✓ Opération terminée.', 'success');
+                            status.innerHTML = '<span class="text-success fw-bold">Terminé</span>';
+                            refresh.classList.remove('d-none');
+                            if (btn) { btn.disabled = false; btn.innerHTML = origHtml; }
+                        } else if (e.data === '[en cours…]') {
+                            // Heartbeat silencieux — juste mettre à jour le statut
+                            status.innerHTML = '<span class="text-warning">⏳ en cours…</span>';
+                        } else {
+                            appendLine(output, e.data);
+                        }
+                    };
+                    es.onerror = function () {
+                        es.close();
+                        appendLine(output, '⚠ Connexion SSE interrompue.', 'error');
+                        if (btn) { btn.disabled = false; btn.innerHTML = origHtml; }
+                    };
+                })
+                .catch(err => {
+                    appendLine(output, '✗ ' + err.message, 'error');
+                    if (btn) { btn.disabled = false; btn.innerHTML = origHtml; }
+                });
+        }
+
+        function appendLine(container, text, type) {
+            const ts   = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            const line = document.createElement('div');
+            line.className = 'term-line' + (type ? ' term-' + type : '');
+            line.innerHTML  = '<span class="term-ts">' + ts + '</span> ' +
+                              text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            container.appendChild(line);
+            container.scrollTop = container.scrollHeight;
+        }
+        </script>
+
+
+    </body>
+
+</html>

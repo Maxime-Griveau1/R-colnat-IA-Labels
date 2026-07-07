@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no"/>
+    <title>Récolnat — Démo pipeline IA</title>
+    <link href="/statics/css/styles_3.css" rel="stylesheet"/>
+    <script src="https://use.fontawesome.com/releases/v6.3.0/js/all.js" crossorigin="anonymous"></script>
+    <style>
+        :root {
+            --c-collecte:          #2196F3;
+            --c-determination:     #E91E63;
+            --c-tampon:            #9C27B0;
+            --c-numero_inventaire: #FF9800;
+            --c-notes:             #4CAF50;
+            --c-specimen:          #F44336;
+            --c-logo:              #607D8B;
+        }
+
+        body { background: #f0f2f5; }
+
+        .demo-header {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            color: #fff;
+            padding: 2rem 0 1.5rem;
+            text-align: center;
+            box-shadow: 0 4px 20px rgba(0,0,0,.4);
+        }
+        .demo-header h1 { font-size: 1.8rem; font-weight: 700; margin-bottom: .3rem; }
+        .demo-header p  { opacity: .75; font-size: .95rem; margin: 0; }
+
+        /* ── Upload zone ── */
+        #upload-zone {
+            border: 2.5px dashed #6c757d;
+            border-radius: 16px;
+            padding: 3rem 2rem;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color .25s, background .25s;
+            background: #fff;
+        }
+        #upload-zone:hover, #upload-zone.drag-over {
+            border-color: #0d6efd;
+            background: #f0f6ff;
+        }
+        #upload-zone .icon { font-size: 3rem; color: #6c757d; margin-bottom: .75rem; }
+        #upload-zone.drag-over .icon { color: #0d6efd; }
+        #upload-zone p { color: #6c757d; margin: 0; }
+
+        /* ── Pipeline steps ── */
+        .pipeline-step {
+            opacity: 0;
+            transform: translateY(20px);
+            transition: opacity .4s ease, transform .4s ease;
+            pointer-events: none;
+        }
+        .pipeline-step.visible {
+            opacity: 1;
+            transform: translateY(0);
+            pointer-events: all;
+        }
+
+        .step-card {
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 2px 12px rgba(0,0,0,.08);
+            overflow: hidden;
+        }
+        .step-header {
+            display: flex;
+            align-items: center;
+            gap: .75rem;
+            padding: .9rem 1.25rem;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .step-num {
+            width: 32px; height: 32px;
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 700; font-size: .85rem;
+            flex-shrink: 0;
+        }
+        .step-body { padding: 1.25rem; }
+
+        /* ── Spinners / états ── */
+        .step-running .step-num { background: #fff3cd; color: #856404; }
+        .step-done    .step-num { background: #d1e7dd; color: #0a3622; }
+        .step-skip    .step-num { background: #e2e3e5; color: #495057; }
+
+        .spinner-ring {
+            width: 20px; height: 20px;
+            border: 3px solid #dee2e6;
+            border-top-color: #0d6efd;
+            border-radius: 50%;
+            animation: spin .7s linear infinite;
+            display: inline-block;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ── Images ── */
+        .img-compare {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+        .img-compare figure {
+            margin: 0;
+            text-align: center;
+        }
+        .img-compare figcaption {
+            font-size: .75rem;
+            color: #6c757d;
+            margin-top: .4rem;
+        }
+        .img-annotated { width: 100%; border-radius: 8px; border: 1px solid #dee2e6; }
+
+        /* ── Zone badges ── */
+        .zone-badge {
+            display: inline-block;
+            border-radius: 4px;
+            padding: 2px 8px;
+            font-size: .75rem;
+            font-weight: 600;
+            color: #fff;
+            margin: 2px;
+        }
+
+        /* ── Crops grid ── */
+        .crops-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: .75rem;
+        }
+        .crop-card {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: .5rem;
+            width: 180px;
+            text-align: center;
+            border: 1px solid #dee2e6;
+            transition: box-shadow .2s;
+        }
+        .crop-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,.12); }
+        .crop-card img { width: 100%; border-radius: 4px; max-height: 120px; object-fit: contain; }
+        .crop-card .crop-label {
+            font-size: .7rem;
+            font-weight: 600;
+            margin-top: .35rem;
+            text-transform: uppercase;
+            letter-spacing: .05em;
+        }
+        .crop-card .crop-text {
+            font-size: .8rem;
+            color: #212529;
+            margin-top: .25rem;
+            word-break: break-word;
+            min-height: 1.4em;
+        }
+        .crop-card .crop-text.pending { color: #adb5bd; font-style: italic; }
+
+        /* ── Darwin Core table ── */
+        .dwc-table td:first-child {
+            font-weight: 600;
+            color: #495057;
+            white-space: nowrap;
+            width: 220px;
+        }
+        .dwc-table td:last-child { font-family: monospace; }
+        .dwc-highlight { background: #fff3cd !important; }
+
+        /* ── Terminal log ── */
+        #demo-log {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            border-radius: 8px;
+            padding: 1rem;
+            font-family: "Cascadia Code", "Fira Mono", monospace;
+            font-size: .78rem;
+            max-height: 220px;
+            overflow-y: auto;
+        }
+        .log-info    { color: #9cdcfe; }
+        .log-success { color: #4ec9b0; }
+        .log-warn    { color: #ce9178; }
+        .log-error   { color: #f48771; }
+
+        /* ── Progress bar ── */
+        #pipeline-progress {
+            height: 6px;
+            border-radius: 3px;
+            background: #dee2e6;
+            overflow: hidden;
+            margin: 1.25rem 0;
+        }
+        #pipeline-progress .bar {
+            height: 100%;
+            background: linear-gradient(90deg, #0d6efd, #6ea8fe);
+            width: 0%;
+            transition: width .6s ease;
+        }
+
+        /* ── Confetti / done state ── */
+        .done-banner {
+            background: linear-gradient(135deg, #198754, #20c997);
+            color: #fff;
+            border-radius: 8px;
+            padding: 1rem 1.5rem;
+            text-align: center;
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+
+        @media (max-width: 768px) {
+            .img-compare { grid-template-columns: 1fr; }
+            .crop-card { width: 140px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="demo-header">
+    <h1><i class="fas fa-microscope me-2"></i>Pipeline IA — Démo interactive</h1>
+    <p>Importez une image d'herbier ou d'entomologie et observez chaque étape en direct</p>
+    <a href="{{ url_for('accueil') }}" class="btn btn-sm btn-outline-light mt-2">
+        <i class="fas fa-arrow-left me-1"></i>Tableau de commande
+    </a>
+</div>
+
+<div class="container-xl py-4">
+
+    <!-- ── Upload ── -->
+    <div id="section-upload">
+        <div id="upload-zone" onclick="document.getElementById('file-input').click()">
+            <div class="icon"><i class="fas fa-cloud-upload-alt"></i></div>
+            <h5 class="fw-semibold mb-1">Déposez une image ici</h5>
+            <p>ou cliquez pour parcourir — JPG, PNG, TIF acceptés</p>
+            <input type="file" id="file-input" accept=".jpg,.jpeg,.png,.tif,.tiff" style="display:none"/>
+        </div>
+        <div id="upload-feedback" class="mt-2 text-center" style="display:none">
+            <div class="spinner-ring me-2"></div><span id="upload-msg">Envoi en cours…</span>
+        </div>
+    </div>
+
+    <!-- ── Barre de progression ── -->
+    <div id="pipeline-progress" style="display:none">
+        <div class="bar" id="progress-bar"></div>
+    </div>
+
+    <!-- ── Étape 0 : Prétraitement ── -->
+    <div class="pipeline-step mb-4" id="step-0">
+        <div class="step-card">
+            <div class="step-header step-running" id="step-0-header">
+                <div class="step-num">0</div>
+                <div>
+                    <div class="fw-semibold">Prétraitement</div>
+                    <small class="text-muted">Redimensionnement 1024×1024 · Amélioration contraste (CLAHE)</small>
+                </div>
+                <div class="ms-auto" id="step-0-status"><div class="spinner-ring"></div></div>
+            </div>
+            <div class="step-body">
+                <div class="img-compare" id="step-0-images">
+                    <figure>
+                        <img id="img-original" class="img-annotated" src="" alt="Original"/>
+                        <figcaption>Image originale</figcaption>
+                    </figure>
+                    <figure>
+                        <img id="img-preprocessed" class="img-annotated" src="" alt="Prétraitée"/>
+                        <figcaption>Image prétraitée (1024×1024, CLAHE)</figcaption>
+                    </figure>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Étape 2 : Zones ── -->
+    <div class="pipeline-step mb-4" id="step-2">
+        <div class="step-card">
+            <div class="step-header step-running" id="step-2-header">
+                <div class="step-num">2</div>
+                <div>
+                    <div class="fw-semibold">Détection des zones</div>
+                    <small class="text-muted">Identification des étiquettes, tampons, codes-barres…</small>
+                </div>
+                <div class="ms-auto" id="step-2-status"><div class="spinner-ring"></div></div>
+            </div>
+            <div class="step-body">
+                <div class="row g-3">
+                    <div class="col-md-8">
+                        <p class="text-muted small mb-2">Image annotée</p>
+                        <img id="img-annotated-2" class="img-annotated" src="" alt="Zones détectées"/>
+                    </div>
+                    <div class="col-md-4">
+                        <p class="text-muted small mb-2">Zones détectées</p>
+                        <div id="zones-list"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Étape 3 : Champs ── -->
+    <div class="pipeline-step mb-4" id="step-3">
+        <div class="step-card">
+            <div class="step-header step-running" id="step-3-header">
+                <div class="step-num">3</div>
+                <div>
+                    <div class="fw-semibold">Détection des champs</div>
+                    <small class="text-muted">Localisation de chaque champ de métadonnée dans les zones</small>
+                </div>
+                <div class="ms-auto" id="step-3-status"><div class="spinner-ring"></div></div>
+            </div>
+            <div class="step-body">
+                <div id="step-3-annotated" class="row g-2 mb-3"></div>
+                <p class="text-muted small mb-2">Crops de champs extraits</p>
+                <div class="crops-grid" id="crops-grid"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Étape 4 : HTR ── -->
+    <div class="pipeline-step mb-4" id="step-4">
+        <div class="step-card">
+            <div class="step-header step-running" id="step-4-header">
+                <div class="step-num">4</div>
+                <div>
+                    <div class="fw-semibold">Transcription HTR</div>
+                    <small class="text-muted">Lecture automatique du texte manuscrit ou imprimé (GLM-OCR)</small>
+                </div>
+                <div class="ms-auto" id="step-4-status"><div class="spinner-ring"></div></div>
+            </div>
+            <div class="step-body">
+                <div class="crops-grid" id="htr-grid"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Étape 5 : Résultats Darwin Core ── -->
+    <div class="pipeline-step mb-4" id="step-5">
+        <div class="step-card">
+            <div class="step-header step-running" id="step-5-header">
+                <div class="step-num">5</div>
+                <div>
+                    <div class="fw-semibold">Fiche Darwin Core</div>
+                    <small class="text-muted">Normalisation des dates, géocodage, vérification taxonomique (GBIF)</small>
+                </div>
+                <div class="ms-auto" id="step-5-status"><div class="spinner-ring"></div></div>
+            </div>
+            <div class="step-body">
+                <div id="dwc-result"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Terminal log (replié) ── -->
+    <div class="pipeline-step mb-4" id="section-log" style="display:none">
+        <div class="d-flex align-items-center mb-2">
+            <small class="text-muted me-2"><i class="fas fa-terminal me-1"></i>Journal technique</small>
+            <button class="btn btn-sm btn-outline-secondary py-0" onclick="toggleLog()">afficher / masquer</button>
+        </div>
+        <div id="demo-log" style="display:none"></div>
+    </div>
+
+</div><!-- /container -->
+
+<script>
+// ── État global ───────────────────────────────────────────────────────────────
+let sessionId   = null;
+let jobId       = null;
+let fieldCrops  = {};   // filename → crop card DOM node (step 3)
+let logVisible  = false;
+
+const ZONE_COLORS = {
+    collecte:          "#2196F3",
+    determination:     "#E91E63",
+    tampon:            "#9C27B0",
+    numero_inventaire: "#FF9800",
+    graines:           "#8BC34A",
+    notes:             "#4CAF50",
+    dessin:            "#795548",
+    specimen:          "#F44336",
+    logo:              "#607D8B",
+};
+
+const STEP_PROGRESS = {0: 15, 2: 35, 3: 55, 4: 80, 5: 100};
+
+// ── Upload / drag & drop ──────────────────────────────────────────────────────
+const zone = document.getElementById("upload-zone");
+const inp  = document.getElementById("file-input");
+
+zone.addEventListener("dragover",  e => { e.preventDefault(); zone.classList.add("drag-over"); });
+zone.addEventListener("dragleave", ()=> zone.classList.remove("drag-over"));
+zone.addEventListener("drop", e => {
+    e.preventDefault();
+    zone.classList.remove("drag-over");
+    const f = e.dataTransfer.files[0];
+    if (f) uploadFile(f);
+});
+inp.addEventListener("change", () => { if (inp.files[0]) uploadFile(inp.files[0]); });
+
+function uploadFile(file) {
+    const fb = document.getElementById("upload-feedback");
+    fb.style.display = "";
+    document.getElementById("upload-msg").textContent = "Envoi en cours…";
+
+    const fd = new FormData();
+    fd.append("image", file);
+
+    fetch("/demo/upload", {method: "POST", body: fd})
+        .then(r => r.json())
+        .then(d => {
+            if (d.error) { alert(d.error); fb.style.display = "none"; return; }
+            sessionId = d.session_id;
+            document.getElementById("upload-msg").textContent = "Image reçue — lancement du pipeline…";
+            document.getElementById("section-upload").style.opacity = ".4";
+            document.getElementById("section-upload").style.pointerEvents = "none";
+            startPipeline(d.original);
+        })
+        .catch(() => { alert("Erreur réseau"); fb.style.display = "none"; });
+}
+
+// ── Lancement pipeline ────────────────────────────────────────────────────────
+function startPipeline(originalFilename) {
+    // Affiche la barre de progression et le journal
+    document.getElementById("pipeline-progress").style.display = "";
+    document.getElementById("section-log").style.display = "";
+
+    // Pré-charge l'image originale
+    document.getElementById("img-original").src = `/demo/image/${sessionId}/${originalFilename}`;
+
+    fetch(`/demo/run/${sessionId}`, {method: "POST"})
+        .then(r => r.json())
+        .then(d => {
+            if (d.error) { alert(d.error); return; }
+            jobId = d.job_id;
+            streamJob(jobId);
+        });
+}
+
+// ── SSE ───────────────────────────────────────────────────────────────────────
+function streamJob(jid) {
+    const es = new EventSource(`/stream/${jid}`);
+    es.onmessage = e => {
+        const raw = e.data;
+        if (raw === "__DONE__") { es.close(); return; }
+
+        if (raw.startsWith("JSON:")) {
+            try { handleEvent(JSON.parse(raw.slice(5))); }
+            catch {}
+            return;
+        }
+
+        // Ligne de log
+        appendLog(raw);
+    };
+    es.onerror = () => es.close();
+}
+
+function appendLog(line) {
+    const log = document.getElementById("demo-log");
+    const span = document.createElement("div");
+    span.className = "term-line";
+    if (/ERREUR|ERROR/i.test(line))    span.classList.add("log-error");
+    else if (/AVERT|WARN/i.test(line)) span.classList.add("log-warn");
+    else if (/===/.test(line))         span.classList.add("log-success");
+    else                                span.classList.add("log-info");
+    span.textContent = line;
+    log.appendChild(span);
+    log.scrollTop = log.scrollHeight;
+}
+
+// ── Gestion des événements JSON ───────────────────────────────────────────────
+function handleEvent(ev) {
+    setProgress(STEP_PROGRESS[ev.step] || 0);
+    switch (ev.step) {
+        case 0: renderStep0(ev); break;
+        case 2: renderStep2(ev); break;
+        case 3: renderStep3(ev); break;
+        case 4: renderStep4(ev); break;
+        case 5: renderStep5(ev); break;
+    }
+}
+
+function imgUrl(filename) {
+    return `/demo/image/${sessionId}/${filename}`;
+}
+
+// ── Étape 0 ───────────────────────────────────────────────────────────────────
+function renderStep0(ev) {
+    showStep("step-0");
+    document.getElementById("img-original").src     = imgUrl(ev.original);
+    document.getElementById("img-preprocessed").src = imgUrl(ev.preprocessed);
+    markDone("step-0-header", "step-0-status", "✓ image normalisée");
+}
+
+// ── Étape 2 ───────────────────────────────────────────────────────────────────
+function renderStep2(ev) {
+    showStep("step-2");
+    if (ev.skipped) {
+        markSkip("step-2-header", "step-2-status", "modèle absent");
+        return;
+    }
+
+    document.getElementById("img-annotated-2").src = imgUrl(ev.annotated);
+
+    // Comptage par zone
+    const counts = {};
+    for (const det of ev.detections) counts[det.class] = (counts[det.class] || 0) + 1;
+
+    const zl = document.getElementById("zones-list");
+    zl.innerHTML = "";
+    for (const [cls, n] of Object.entries(counts)) {
+        const color = ZONE_COLORS[cls] || "#999";
+        zl.innerHTML += `<div class="mb-1">
+            <span class="zone-badge" style="background:${color}">${cls}</span>
+            <span class="text-muted small"> × ${n}</span>
+        </div>`;
+    }
+
+    const total = ev.detections.length;
+    markDone("step-2-header", "step-2-status", `${total} zone${total > 1 ? "s" : ""} détectée${total > 1 ? "s" : ""}`);
+}
+
+// ── Étape 3 ───────────────────────────────────────────────────────────────────
+function renderStep3(ev) {
+    showStep("step-3");
+
+    // Images annotées (zones avec champs en surbrillance)
+    const annDiv = document.getElementById("step-3-annotated");
+    annDiv.innerHTML = "";
+    for (const [stem, annFile] of Object.entries(ev.annotated || {})) {
+        annDiv.innerHTML += `
+        <div class="col-md-6">
+            <p class="text-muted small mb-1">${stem}</p>
+            <img src="${imgUrl(annFile)}" class="img-annotated"/>
+        </div>`;
+    }
+
+    // Crops de champs
+    const grid = document.getElementById("crops-grid");
+    const htrGrid = document.getElementById("htr-grid");
+    grid.innerHTML = "";
+    htrGrid.innerHTML = "";
+    fieldCrops = {};
+
+    for (const f of ev.fields) {
+        const color = ZONE_COLORS[f.zone] || "#999";
+        const node = document.createElement("div");
+        node.className = "crop-card";
+        node.id = `crop-${f.filename}`;
+        node.innerHTML = `
+            <img src="${imgUrl(f.path_rel)}" alt="${f.field_class}"/>
+            <div class="crop-label" style="color:${color}">${f.field_class}</div>
+            <div class="crop-text pending" id="text-${f.filename}">en attente HTR…</div>`;
+        grid.appendChild(node);
+        fieldCrops[f.filename] = f;
+
+        // Clone pour la grille HTR (step 4)
+        const node2 = node.cloneNode(true);
+        node2.id = `htr-crop-${f.filename}`;
+        node2.querySelector(".crop-text").id = `htr-text-${f.filename}`;
+        htrGrid.appendChild(node2);
+    }
+
+    const total = ev.fields.length;
+    markDone("step-3-header", "step-3-status", `${total} champ${total > 1 ? "s" : ""} détecté${total > 1 ? "s" : ""}`);
+}
+
+// ── Étape 4 ───────────────────────────────────────────────────────────────────
+function renderStep4(ev) {
+    showStep("step-4");
+
+    for (const t of ev.transcriptions) {
+        // Mise à jour dans la grille step3
+        const el3 = document.getElementById(`text-${t.filename}`);
+        if (el3) { el3.textContent = t.text; el3.classList.remove("pending"); }
+        // Et dans la grille HTR
+        const el4 = document.getElementById(`htr-text-${t.filename}`);
+        if (el4) { el4.textContent = t.text; el4.classList.remove("pending"); }
+    }
+
+    const total = ev.transcriptions.length;
+    markDone("step-4-header", "step-4-status", `${total} champ${total > 1 ? "s" : ""} transcrit${total > 1 ? "s" : ""}`);
+}
+
+// ── Étape 5 ───────────────────────────────────────────────────────────────────
+const DWC_LABELS = {
+    specimen_id:              "Identifiant spécimen",
+    collecteur:               "Collecteur",
+    date_collecte:            "Date de collecte",
+    date_collecte_statut:     "Statut date",
+    localite:                 "Localité",
+    latitude:                 "Latitude",
+    longitude:                "Longitude",
+    source_coordonnees:       "Source coordonnées",
+    numero_inventaire:        "N° inventaire",
+    determination_1:          "Détermination",
+    determinateur_1:          "Déterminateur",
+    date_determination_1:     "Date détermination",
+    n_determinations:         "Nb déterminations",
+};
+
+function renderStep5(ev) {
+    showStep("step-5");
+    const div = document.getElementById("dwc-result");
+
+    if (!ev.result || Object.keys(ev.result).length === 0) {
+        div.innerHTML = `<div class="alert alert-warning mb-0">
+            <i class="fas fa-exclamation-triangle me-2"></i>
+            Aucune donnée normalisée produite (vérifier les étapes précédentes).
+        </div>`;
+        markSkip("step-5-header", "step-5-status", "aucune donnée");
+        return;
+    }
+
+    // Champs importants en haut
+    const priority = ["specimen_id","collecteur","date_collecte","localite","latitude","longitude","numero_inventaire","determination_1","determinateur_1","date_determination_1"];
+    const rest = Object.keys(ev.result).filter(k => !priority.includes(k) && ev.result[k]);
+
+    let rows = "";
+    for (const k of [...priority, ...rest]) {
+        const v = ev.result[k];
+        if (!v) continue;
+        const label = DWC_LABELS[k] || k.replace(/_/g, " ");
+        const hi = ["latitude","longitude","determination_1"].includes(k) ? " dwc-highlight" : "";
+        rows += `<tr class="${hi}">
+            <td>${label}</td>
+            <td>${escHtml(v)}</td>
+        </tr>`;
+    }
+
+    div.innerHTML = `
+    <div class="done-banner mb-3">
+        <i class="fas fa-check-circle me-2"></i>
+        Fiche Darwin Core générée avec succès
+    </div>
+    <div class="table-responsive">
+        <table class="table table-sm table-bordered dwc-table mb-0">
+            <tbody>${rows}</tbody>
+        </table>
+    </div>`;
+
+    markDone("step-5-header", "step-5-status", "✓ fiche complète");
+}
+
+// ── Helpers UI ────────────────────────────────────────────────────────────────
+function showStep(id) {
+    const el = document.getElementById(id);
+    el.classList.add("visible");
+    el.scrollIntoView({behavior: "smooth", block: "nearest"});
+}
+
+function markDone(headerId, statusId, label) {
+    document.getElementById(headerId).classList.replace("step-running", "step-done");
+    document.getElementById(statusId).innerHTML =
+        `<span class="text-success small"><i class="fas fa-check-circle me-1"></i>${escHtml(label)}</span>`;
+}
+
+function markSkip(headerId, statusId, reason) {
+    document.getElementById(headerId).classList.replace("step-running", "step-skip");
+    document.getElementById(statusId).innerHTML =
+        `<span class="text-muted small"><i class="fas fa-minus-circle me-1"></i>${escHtml(reason)}</span>`;
+}
+
+function setProgress(pct) {
+    document.getElementById("progress-bar").style.width = pct + "%";
+}
+
+function toggleLog() {
+    const log = document.getElementById("demo-log");
+    logVisible = !logVisible;
+    log.style.display = logVisible ? "" : "none";
+}
+
+function escHtml(s) {
+    return String(s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+}
+</script>
+</body>
+</html>
