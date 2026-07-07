@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "flask-app",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-c", "cd /home/mgriveau/IA_labels && source env/bin/activate && cd APP && python run.py"],
+      "port": 5000
+    }
+  ]
+}
